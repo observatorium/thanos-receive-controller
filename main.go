@@ -6,15 +6,12 @@ import (
 	"fmt"
 	stdlog "log"
 	"os"
+	"os/signal"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/improbable-eng/thanos/pkg/receive"
 	"github.com/oklog/run"
-	"gopkg.in/yaml.v2"
-	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -30,7 +27,7 @@ func main() {
 
 	flag.StringVar(&config.KubeConfig, "kubeconfig", "", "Path to kubeconfig")
 	flag.StringVar(&config.Namespace, "namespace", "default", "The namespace we operate in")
-	flag.StringVar(&config.StatefulSetLabel, "statefulset-label", "hashring", "The label StatefulSets have to be watched with")
+	flag.StringVar(&config.StatefulSetLabel, "statefulset-label", "controller.receive.thanos.io=thanos-receive-controller", "The label StatefulSets have to be watched with")
 	flag.StringVar(&config.ConfigMapName, "configmap-name", "", "The name to the original ConfigMap containing all hashring tenants")
 	flag.StringVar(&config.ConfigMapGeneratedName, "configmap-generated-name", "", "The name to the generated and populated ConfigMap")
 	flag.Parse()
@@ -49,9 +46,22 @@ func main() {
 		stdlog.Fatal(err)
 	}
 
+	// The entire controller is synchronized via these 2 channels.
+	// The ConfigMapWatcher and StatefulSetWatcher write into individual channels.
+	// Both channels are read from the XXX and merges into the populated config which is then written.
+
 	hashringUpdates := make(chan []receive.HashringConfig)
+	StatefulSetUpdates := make(chan StatefulSetUpdate)
 
 	var gr run.Group
+	{
+		gr.Add(func() error {
+			sig := make(chan os.Signal)
+			signal.Notify(sig, os.Interrupt, os.Kill)
+			<-sig
+			return nil
+		}, func(err error) {})
+	}
 	{
 		ctx, cancel := context.WithCancel(context.Background())
 		cmw := ConfigMapWatcher{klient: klient}
@@ -59,31 +69,60 @@ func main() {
 		gr.Add(func() error {
 			return cmw.Watch(ctx, config.Namespace, config.ConfigMapName, hashringUpdates)
 		}, func(err error) {
+			level.Info(logger).Log("msg", "shutting down ConfigMap watcher")
 			cancel()
 		})
 	}
 	{
+		ctx, cancel := context.WithCancel(context.Background())
+		stsw := StatefulSetWatcher{klient: klient}
+
 		gr.Add(func() error {
-			for hu := range hashringUpdates {
-				for _, hashring := range hu {
-					fmt.Printf("%+v\n", hashring)
-				}
-			}
-			return nil
+			return stsw.Watch(ctx, config.Namespace, config.StatefulSetLabel, StatefulSetUpdates)
 		}, func(err error) {
+			level.Info(logger).Log("msg", "shutting down StatefulSet watcher")
+			cancel()
 		})
 	}
-	//{
-	//	controller := &Controller{
-	//		klient,
-	//	}
-	//
-	//	gr.Add(func() error {
-	//		return controller.Run(config.Namespace, config.StatefulSetLabel)
-	//	}, func(err error) {
-	//		controller.Shutdown()
-	//	})
-	//}
+	{
+		ctx, cancel := context.WithCancel(context.Background())
+
+		cp := ConfigPopulator{
+			namespace:    config.Namespace,
+			statefulsets: map[string]StatefulSetUpdate{},
+		}
+
+		cms := ConfigMapSaver{
+			klient:    klient,
+			namespace: config.Namespace,
+			name:      config.ConfigMapGeneratedName,
+		}
+
+		gr.Add(func() error {
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case hashring := <-hashringUpdates:
+					cp.UpdateConfig(hashring)
+					if err := cms.SaveHashring(cp.Populate()); err != nil {
+						level.Warn(logger).Log("msg", "failed saving hashring to ConfigMap", "err", err)
+						continue
+					}
+					level.Debug(logger).Log("msg", "Saved a newly generated ConfigMap")
+				case sts := <-StatefulSetUpdates:
+					cp.UpdateStatefulSet(sts)
+					if err := cms.SaveHashring(cp.Populate()); err != nil {
+						level.Warn(logger).Log("msg", "failed saving hashring to ConfigMap", "err", err)
+						continue
+					}
+					level.Debug(logger).Log("msg", "Saved a newly generated ConfigMap")
+				}
+			}
+		}, func(err error) {
+			cancel()
+		})
+	}
 
 	level.Info(logger).Log("msg", "starting the controller")
 
@@ -92,63 +131,48 @@ func main() {
 	}
 }
 
-type ConfigMapWatcher struct {
-	klient kubernetes.Interface
-	logger log.Logger
+type ConfigPopulator struct {
+	namespace    string
+	hashrings    []receive.HashringConfig
+	statefulsets map[string]StatefulSetUpdate
+
+	config []receive.HashringConfig
 }
 
-func (cmw *ConfigMapWatcher) Watch(ctx context.Context, namespace string, name string, updates chan<- []receive.HashringConfig) error {
-	if cmw.logger == nil {
-		cmw.logger = log.NewNopLogger()
+func (cp *ConfigPopulator) UpdateConfig(hashrings []receive.HashringConfig) {
+	cp.hashrings = hashrings
+}
+
+func (cp *ConfigPopulator) UpdateStatefulSet(sts StatefulSetUpdate) {
+	if cp.statefulsets == nil {
+		cp.statefulsets = make(map[string]StatefulSetUpdate, 1)
 	}
 
-	watch, err := cmw.klient.CoreV1().ConfigMaps(namespace).Watch(metav1.ListOptions{
-		FieldSelector: fields.OneTermEqualSelector("metadata.name", name).String(),
-		Watch:         true,
-	})
-	if err != nil {
-		return err
-	}
+	cp.statefulsets[sts.Name] = sts
+}
 
-	for {
-		select {
-		case <-ctx.Done():
-			watch.Stop()
-			close(updates)
-		case event := <-watch.ResultChan():
-			cm := event.Object.(*corev1.ConfigMap)
-			c := cm.Data["config.yaml"]
+func (cp *ConfigPopulator) Populate() []receive.HashringConfig {
+	hashrings := cp.hashrings
 
-			var hashrings []receive.HashringConfig
-
-			if err := yaml.Unmarshal([]byte(c), &hashrings); err != nil {
-				level.Warn(cmw.logger).Log("msg", "failed to decode configuration", "err", err)
-				return err
+	for i, hashring := range hashrings {
+		if sts, exists := cp.statefulsets[hashring.Hashring]; exists {
+			var endpoints []string
+			for i := 0; i < sts.Replicas; i++ {
+				endpoints = append(endpoints,
+					// TODO: Make sure this is actually correct
+					fmt.Sprintf("%s://%s-%d.%s.%s:%d",
+						"https",
+						sts.Name,
+						i,
+						sts.Name,
+						cp.namespace,
+						10901,
+					),
+				)
 			}
-
-			updates <- hashrings
+			hashrings[i].Endpoints = endpoints
 		}
 	}
+
+	return hashrings
 }
-
-type Controller struct {
-	klient kubernetes.Interface
-}
-
-func (c *Controller) Run(namespace string, statefulSetLabel string) error {
-	list, err := c.klient.AppsV1().StatefulSets(namespace).List(metav1.ListOptions{
-		LabelSelector: statefulSetLabel,
-	})
-	if err != nil {
-		return err
-	}
-
-	for _, sts := range list.Items {
-		r := sts.Spec.Replicas
-		fmt.Println(r)
-	}
-
-	return nil
-}
-
-func (c *Controller) Shutdown() {}
