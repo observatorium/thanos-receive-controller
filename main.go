@@ -63,7 +63,8 @@ func main() {
 	var gr run.Group
 	{
 		gr.Add(func() error {
-			sig := make(chan os.Signal)
+			// Signal chans must be buffered.
+			sig := make(chan os.Signal, 1)
 			signal.Notify(sig, os.Interrupt, os.Kill)
 			<-sig
 			return nil
