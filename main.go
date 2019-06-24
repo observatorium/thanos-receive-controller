@@ -132,6 +132,8 @@ func main() {
 			}
 		}, func(err error) {
 			cancel()
+			close(hashringUpdates)
+			close(StatefulSetUpdates)
 		})
 	}
 
