@@ -152,8 +152,6 @@ type ConfigPopulator struct {
 	path   string
 	port   int
 	scheme string
-
-	config []receive.HashringConfig
 }
 
 func (cp *ConfigPopulator) UpdateConfig(hashrings []receive.HashringConfig) {
