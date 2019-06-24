@@ -7,6 +7,7 @@ import (
 	stdlog "log"
 	"os"
 	"os/signal"
+	"path"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -23,13 +24,19 @@ func main() {
 		StatefulSetLabel       string
 		ConfigMapName          string
 		ConfigMapGeneratedName string
+		Path                   string
+		Port                   int
+		Scheme                 string
 	}{}
 
 	flag.StringVar(&config.KubeConfig, "kubeconfig", "", "Path to kubeconfig")
-	flag.StringVar(&config.Namespace, "namespace", "default", "The namespace we operate in")
-	flag.StringVar(&config.StatefulSetLabel, "statefulset-label", "controller.receive.thanos.io=thanos-receive-controller", "The label StatefulSets have to be watched with")
-	flag.StringVar(&config.ConfigMapName, "configmap-name", "", "The name to the original ConfigMap containing all hashring tenants")
-	flag.StringVar(&config.ConfigMapGeneratedName, "configmap-generated-name", "", "The name to the generated and populated ConfigMap")
+	flag.StringVar(&config.Namespace, "namespace", "default", "The namespace to watch")
+	flag.StringVar(&config.StatefulSetLabel, "statefulset-label", "controller.receive.thanos.io=thanos-receive-controller", "The label StatefulSets must have to be watched by the controller")
+	flag.StringVar(&config.ConfigMapName, "configmap-name", "", "The name of the original ConfigMap containing the hashring tenant configuration")
+	flag.StringVar(&config.ConfigMapGeneratedName, "configmap-generated-name", "", "The name of the generated and populated ConfigMap")
+	flag.StringVar(&config.Path, "path", "/api/v1/receive", "The URL path on which receive components accept write requests")
+	flag.IntVar(&config.Port, "port", 19291, "The port on which receive components are listening for write requests")
+	flag.StringVar(&config.Scheme, "scheme", "http", "The URL scheme on which receive components accept write requests")
 	flag.Parse()
 
 	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
@@ -90,6 +97,9 @@ func main() {
 		cp := ConfigPopulator{
 			namespace:    config.Namespace,
 			statefulsets: map[string]StatefulSetUpdate{},
+			path:         config.Path,
+			port:         config.Port,
+			scheme:       config.Scheme,
 		}
 
 		cms := ConfigMapSaver{
@@ -136,6 +146,10 @@ type ConfigPopulator struct {
 	hashrings    []receive.HashringConfig
 	statefulsets map[string]StatefulSetUpdate
 
+	path   string
+	port   int
+	scheme string
+
 	config []receive.HashringConfig
 }
 
@@ -160,14 +174,14 @@ func (cp *ConfigPopulator) Populate() []receive.HashringConfig {
 			for i := 0; i < sts.Replicas; i++ {
 				endpoints = append(endpoints,
 					// TODO: Make sure this is actually correct
-					fmt.Sprintf("%s://%s-%d.%s.%s:%d",
-						"https",
+					path.Join(fmt.Sprintf("%s://%s-%d.%s.%s:%d",
+						cp.scheme,
 						sts.Name,
 						i,
 						sts.Name,
 						cp.namespace,
-						10901,
-					),
+						cp.port,
+					), cp.path),
 				)
 			}
 			hashrings[i].Endpoints = endpoints
