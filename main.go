@@ -7,7 +7,7 @@ import (
 	stdlog "log"
 	"os"
 	"os/signal"
-	"path"
+	"strings"
 
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
@@ -152,8 +152,6 @@ type ConfigPopulator struct {
 	path   string
 	port   int
 	scheme string
-
-	config []receive.HashringConfig
 }
 
 func (cp *ConfigPopulator) UpdateConfig(hashrings []receive.HashringConfig) {
@@ -177,14 +175,14 @@ func (cp *ConfigPopulator) Populate() []receive.HashringConfig {
 			for i := 0; i < sts.Replicas; i++ {
 				endpoints = append(endpoints,
 					// TODO: Make sure this is actually correct
-					path.Join(fmt.Sprintf("%s://%s-%d.%s.%s:%d",
+					fmt.Sprintf("%s://%s-%d.%s.%s:%d/%s",
 						cp.scheme,
 						sts.Name,
 						i,
 						sts.Name,
 						cp.namespace,
 						cp.port,
-					), cp.path),
+						strings.TrimPrefix(cp.path, "/")),
 				)
 			}
 			hashrings[i].Endpoints = endpoints

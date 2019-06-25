@@ -43,9 +43,9 @@ func TestConfigPopulator(t *testing.T) {
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
 				Endpoints: []string{
-					"hashring0-0.hashring0.namespace:10901",
-					"hashring0-1.hashring0.namespace:10901",
-					"hashring0-2.hashring0.namespace:10901",
+					"http://hashring0-0.hashring0.namespace:19291/api/v1/receive",
+					"http://hashring0-1.hashring0.namespace:19291/api/v1/receive",
+					"http://hashring0-2.hashring0.namespace:19291/api/v1/receive",
 				},
 			}},
 		},
@@ -70,11 +70,11 @@ func TestConfigPopulator(t *testing.T) {
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
 				Endpoints: []string{
-					"hashring0-0.hashring0.namespace:10901",
-					"hashring0-1.hashring0.namespace:10901",
-					"hashring0-2.hashring0.namespace:10901",
-					"hashring0-3.hashring0.namespace:10901",
-					"hashring0-4.hashring0.namespace:10901",
+					"http://hashring0-0.hashring0.namespace:19291/api/v1/receive",
+					"http://hashring0-1.hashring0.namespace:19291/api/v1/receive",
+					"http://hashring0-2.hashring0.namespace:19291/api/v1/receive",
+					"http://hashring0-3.hashring0.namespace:19291/api/v1/receive",
+					"http://hashring0-4.hashring0.namespace:19291/api/v1/receive",
 				},
 			}},
 		},
@@ -100,9 +100,9 @@ func TestConfigPopulator(t *testing.T) {
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar", "baz"},
 				Endpoints: []string{
-					"hashring0-0.hashring0.namespace:10901",
-					"hashring0-1.hashring0.namespace:10901",
-					"hashring0-2.hashring0.namespace:10901",
+					"http://hashring0-0.hashring0.namespace:19291/api/v1/receive",
+					"http://hashring0-1.hashring0.namespace:19291/api/v1/receive",
+					"http://hashring0-2.hashring0.namespace:19291/api/v1/receive",
 				},
 			}},
 		},
@@ -127,9 +127,9 @@ func TestConfigPopulator(t *testing.T) {
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
 				Endpoints: []string{
-					"hashring0-0.hashring0.namespace:10901",
-					"hashring0-1.hashring0.namespace:10901",
-					"hashring0-2.hashring0.namespace:10901",
+					"http://hashring0-0.hashring0.namespace:19291/api/v1/receive",
+					"http://hashring0-1.hashring0.namespace:19291/api/v1/receive",
+					"http://hashring0-2.hashring0.namespace:19291/api/v1/receive",
 				},
 			}},
 		},
@@ -137,13 +137,18 @@ func TestConfigPopulator(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cp := &ConfigPopulator{namespace: "namespace"}
+			cp := &ConfigPopulator{
+				namespace: "namespace",
+				path:      "/api/v1/receive",
+				port:      19291,
+				scheme:    "http",
+			}
 
 			tt.updates(cp)
 
 			config := cp.Populate()
 			if !reflect.DeepEqual(config, tt.expected) {
-				t.Errorf("the expected config does not match the actual config\ngiven:    %+v\nexpected: %+v\n", config, tt.expected)
+				t.Errorf("the expected config does not match the actual config\ncase:\t%q\ngiven:\t%+v\nexpected:\t%+v\n", tt.name, config, tt.expected)
 			}
 		})
 	}
