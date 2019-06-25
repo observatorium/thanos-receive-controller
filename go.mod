@@ -11,6 +11,7 @@ require (
 	github.com/imdario/mergo v0.3.7 // indirect
 	github.com/improbable-eng/thanos v0.5.0-rc.0.0.20190624152057-70ba420da8af
 	github.com/oklog/run v1.0.0
+	github.com/pkg/errors v0.8.1
 	golang.org/x/crypto v0.0.0-20190611184440-5c40567a22f8 // indirect
 	golang.org/x/net v0.0.0-20190613194153-d28f0bde5980 // indirect
 	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45 // indirect
