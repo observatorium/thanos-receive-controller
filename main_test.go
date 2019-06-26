@@ -44,7 +44,8 @@ func TestController(t *testing.T) {
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{Name: "hashring0", Labels: map[string]string{"a": "b"}},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas: intPointer(3),
+						Replicas:    intPointer(3),
+						ServiceName: "h0",
 					},
 				},
 			},
@@ -52,9 +53,9 @@ func TestController(t *testing.T) {
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
 				Endpoints: []string{
-					"http://hashring0-0.hashring0.namespace:19291/api/v1/receive",
-					"http://hashring0-1.hashring0.namespace:19291/api/v1/receive",
-					"http://hashring0-2.hashring0.namespace:19291/api/v1/receive",
+					"http://hashring0-0.h0.namespace.svc.cluster.local:19291/api/v1/receive",
+					"http://hashring0-1.h0.namespace.svc.cluster.local:19291/api/v1/receive",
+					"http://hashring0-2.h0.namespace.svc.cluster.local:19291/api/v1/receive",
 				},
 			}},
 		},
@@ -68,13 +69,15 @@ func TestController(t *testing.T) {
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{Name: "hashring0", Labels: map[string]string{"a": "b"}},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas: intPointer(3),
+						Replicas:    intPointer(3),
+						ServiceName: "h0",
 					},
 				},
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{Name: "hashring123"},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas: intPointer(123),
+						Replicas:    intPointer(123),
+						ServiceName: "h123",
 					},
 				},
 			},
@@ -82,9 +85,9 @@ func TestController(t *testing.T) {
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
 				Endpoints: []string{
-					"http://hashring0-0.hashring0.namespace:19291/api/v1/receive",
-					"http://hashring0-1.hashring0.namespace:19291/api/v1/receive",
-					"http://hashring0-2.hashring0.namespace:19291/api/v1/receive",
+					"http://hashring0-0.h0.namespace.svc.cluster.local:19291/api/v1/receive",
+					"http://hashring0-1.h0.namespace.svc.cluster.local:19291/api/v1/receive",
+					"http://hashring0-2.h0.namespace.svc.cluster.local:19291/api/v1/receive",
 				},
 			}},
 		},
@@ -100,13 +103,15 @@ func TestController(t *testing.T) {
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{Name: "hashring0", Labels: map[string]string{"a": "b"}},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas: intPointer(3),
+						Replicas:    intPointer(3),
+						ServiceName: "h0",
 					},
 				},
 				&appsv1.StatefulSet{
 					ObjectMeta: metav1.ObjectMeta{Name: "hashring1", Labels: map[string]string{"a": "b"}},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas: intPointer(2),
+						Replicas:    intPointer(2),
+						ServiceName: "h1",
 					},
 				},
 			},
@@ -114,15 +119,15 @@ func TestController(t *testing.T) {
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
 				Endpoints: []string{
-					"http://hashring0-0.hashring0.namespace:19291/api/v1/receive",
-					"http://hashring0-1.hashring0.namespace:19291/api/v1/receive",
-					"http://hashring0-2.hashring0.namespace:19291/api/v1/receive",
+					"http://hashring0-0.h0.namespace.svc.cluster.local:19291/api/v1/receive",
+					"http://hashring0-1.h0.namespace.svc.cluster.local:19291/api/v1/receive",
+					"http://hashring0-2.h0.namespace.svc.cluster.local:19291/api/v1/receive",
 				},
 			}, {
 				Hashring: "hashring1",
 				Endpoints: []string{
-					"http://hashring1-0.hashring1.namespace:19291/api/v1/receive",
-					"http://hashring1-1.hashring1.namespace:19291/api/v1/receive",
+					"http://hashring1-0.h1.namespace.svc.cluster.local:19291/api/v1/receive",
+					"http://hashring1-1.h1.namespace.svc.cluster.local:19291/api/v1/receive",
 				},
 			}},
 		},
@@ -133,6 +138,7 @@ func TestController(t *testing.T) {
 				labelKey:               "a",
 				labelValue:             "b",
 				fileName:               "hashrings.json",
+				clusterDomain:          "cluster.local",
 				configMapName:          "original",
 				configMapGeneratedName: "generated",
 				namespace:              "namespace",
@@ -175,7 +181,7 @@ func TestController(t *testing.T) {
 			}
 
 			// Reconciliation is async, so we need to wait a bit.
-			<-time.After(250 * time.Millisecond)
+			<-time.After(500 * time.Millisecond)
 			cm, err = klient.CoreV1().ConfigMaps(opts.namespace).Get(opts.configMapGeneratedName, metav1.GetOptions{})
 			if err != nil {
 				t.Fatalf("got unexpected error getting ConfigMap: %v", err)

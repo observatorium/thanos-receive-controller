@@ -37,6 +37,7 @@ func main() {
 		KubeConfig             string
 		Namespace              string
 		StatefulSetLabel       string
+		ClusterDomain          string
 		ConfigMapName          string
 		ConfigMapGeneratedName string
 		FileName               string
@@ -48,6 +49,7 @@ func main() {
 	flag.StringVar(&config.KubeConfig, "kubeconfig", "", "Path to kubeconfig")
 	flag.StringVar(&config.Namespace, "namespace", "default", "The namespace to watch")
 	flag.StringVar(&config.StatefulSetLabel, "statefulset-label", "controller.receive.thanos.io=thanos-receive-controller", "The label StatefulSets must have to be watched by the controller")
+	flag.StringVar(&config.ClusterDomain, "cluster-domain", "cluster.local", "The DNS domain of the cluster")
 	flag.StringVar(&config.ConfigMapName, "configmap-name", "", "The name of the original ConfigMap containing the hashring tenant configuration")
 	flag.StringVar(&config.ConfigMapGeneratedName, "configmap-generated-name", "", "The name of the generated and populated ConfigMap")
 	flag.StringVar(&config.FileName, "file-name", "", "The name of the configuration file in the ConfigMap")
@@ -91,6 +93,7 @@ func main() {
 	}
 	{
 		opt := &options{
+			clusterDomain:          config.ClusterDomain,
 			configMapName:          config.ConfigMapName,
 			configMapGeneratedName: config.ConfigMapGeneratedName,
 			fileName:               config.FileName,
@@ -119,6 +122,7 @@ func main() {
 }
 
 type options struct {
+	clusterDomain          string
 	configMapName          string
 	configMapGeneratedName string
 	fileName               string
@@ -258,12 +262,13 @@ func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets m
 			for i := 0; i < int(*sts.Spec.Replicas); i++ {
 				endpoints = append(endpoints,
 					// TODO: Make sure this is actually correct
-					fmt.Sprintf("%s://%s-%d.%s.%s:%d/%s",
+					fmt.Sprintf("%s://%s-%d.%s.%s.svc.%s:%d/%s",
 						c.options.scheme,
 						sts.Name,
 						i,
-						sts.Name,
+						sts.Spec.ServiceName,
 						c.options.namespace,
+						c.options.clusterDomain,
 						c.options.port,
 						strings.TrimPrefix(c.options.path, "/")),
 				)
