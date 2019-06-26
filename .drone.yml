@@ -11,8 +11,9 @@ steps:
   pull: always
   image: golang:1.12
   commands:
-  - go build
-  - go test
+  - go build -v
+  - go test -v
   environment:
     CGO_ENABLED: 0
     GO111MODULE: on
+    GOPROXY: https://proxy.golang.org
