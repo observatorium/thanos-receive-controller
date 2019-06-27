@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -136,7 +137,7 @@ type options struct {
 
 type controller struct {
 	options *options
-	queue   chan struct{}
+	queue   *queue
 	logger  log.Logger
 
 	klient  kubernetes.Interface
@@ -150,7 +151,7 @@ func newController(klient kubernetes.Interface, logger log.Logger, o *options) *
 	}
 	return &controller{
 		options: o,
-		queue:   make(chan struct{}),
+		queue:   newQueue(),
 		logger:  logger,
 
 		klient:  klient,
@@ -161,41 +162,28 @@ func newController(klient kubernetes.Interface, logger log.Logger, o *options) *
 	}
 }
 
-func (c *controller) run(stopc <-chan struct{}) error {
-	defer close(c.queue)
+func (c *controller) run(stop <-chan struct{}) error {
+	defer c.queue.stop()
 
-	go c.worker()
-
-	go c.cmapInf.Run(stopc)
-	go c.ssetInf.Run(stopc)
-	if err := c.waitForCacheSync(stopc); err != nil {
+	go c.cmapInf.Run(stop)
+	go c.ssetInf.Run(stop)
+	if err := c.waitForCacheSync(stop); err != nil {
 		return err
 	}
 	c.cmapInf.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(_ interface{}) { c.addWorkItem() },
-		DeleteFunc: func(_ interface{}) { c.addWorkItem() },
-		UpdateFunc: func(_, _ interface{}) { c.addWorkItem() },
+		AddFunc:    func(_ interface{}) { c.queue.add() },
+		DeleteFunc: func(_ interface{}) { c.queue.add() },
+		UpdateFunc: func(_, _ interface{}) { c.queue.add() },
 	})
 	c.ssetInf.AddEventHandler(cache.ResourceEventHandlerFuncs{
-		AddFunc:    func(_ interface{}) { c.addWorkItem() },
-		DeleteFunc: func(_ interface{}) { c.addWorkItem() },
-		UpdateFunc: func(_, _ interface{}) { c.addWorkItem() },
+		AddFunc:    func(_ interface{}) { c.queue.add() },
+		DeleteFunc: func(_ interface{}) { c.queue.add() },
+		UpdateFunc: func(_, _ interface{}) { c.queue.add() },
 	})
+	go c.worker()
 
-	<-stopc
+	<-stop
 	return nil
-}
-
-// addWorkItem is non-blocking. If the chan is blocked,
-// then an update will already be processed and we don't
-// need to notify again.
-func (c *controller) addWorkItem() {
-	select {
-	case c.queue <- struct{}{}:
-		return
-	default:
-		return
-	}
 }
 
 // waitForCacheSync waits for the informers' caches to be synced.
@@ -223,10 +211,8 @@ func (c *controller) waitForCacheSync(stopc <-chan struct{}) error {
 	return nil
 }
 
-// worker runs a worker thread that just dequeues items, processes them, and
-// marks them done.
 func (c *controller) worker() {
-	for range c.queue {
+	for c.queue.get() {
 		c.sync()
 	}
 }
@@ -306,4 +292,46 @@ func (c *controller) saveHashring(hashring []receive.HashringConfig) error {
 
 	_, err = c.klient.CoreV1().ConfigMaps(c.options.namespace).Update(cm)
 	return err
+}
+
+// queue is a non-blocking queue.
+type queue struct {
+	sync.Mutex
+	ch chan struct{}
+	ok bool
+}
+
+func newQueue() *queue {
+	// We want a buffer of size 1 to queue updates
+	// while a dequeuer is busy.
+	return &queue{ch: make(chan struct{}, 1), ok: true}
+}
+
+func (q *queue) add() {
+	q.Lock()
+	defer q.Unlock()
+	if !q.ok {
+		return
+	}
+	select {
+	case q.ch <- struct{}{}:
+	default:
+	}
+}
+
+func (q *queue) stop() {
+	q.Lock()
+	defer q.Unlock()
+	if !q.ok {
+		return
+	}
+	close(q.ch)
+	q.ok = false
+}
+
+func (q *queue) get() bool {
+	<-q.ch
+	q.Lock()
+	defer q.Unlock()
+	return q.ok
 }

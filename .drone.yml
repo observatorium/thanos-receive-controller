@@ -12,8 +12,9 @@ steps:
   image: golang:1.12
   commands:
   - go build -v
-  - go test -v
+  - go test -v -race ./...
   environment:
-    CGO_ENABLED: 0
+    # -race requires cgo
+    CGO_ENABLED: 1
     GO111MODULE: on
     GOPROXY: https://proxy.golang.org
