@@ -21,6 +21,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: thanos-receive-controller
+  labels:
     app.kubernetes.io/name: thanos-receive-controller
 spec:
   replicas: 1
