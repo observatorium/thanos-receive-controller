@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	stdlog "log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
@@ -16,6 +18,9 @@ import (
 	"github.com/improbable-eng/thanos/pkg/receive"
 	"github.com/oklog/run"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/prometheus/common/version"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -30,7 +35,8 @@ import (
 )
 
 const (
-	resyncPeriod = 5 * time.Minute
+	resyncPeriod                  = 5 * time.Minute
+	internalServerShutdownTimeout = 5 * time.Second
 )
 
 func main() {
@@ -45,6 +51,7 @@ func main() {
 		Path                   string
 		Port                   int
 		Scheme                 string
+		InternalAddr           string
 	}{}
 
 	flag.StringVar(&config.KubeConfig, "kubeconfig", "", "Path to kubeconfig")
@@ -57,6 +64,7 @@ func main() {
 	flag.StringVar(&config.Path, "path", "/api/v1/receive", "The URL path on which receive components accept write requests")
 	flag.IntVar(&config.Port, "port", 19291, "The port on which receive components are listening for write requests")
 	flag.StringVar(&config.Scheme, "scheme", "http", "The URL scheme on which receive components accept write requests")
+	flag.StringVar(&config.InternalAddr, "internal-addr", ":8080", "The address on which internal server runs")
 	flag.Parse()
 
 	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
@@ -79,12 +87,19 @@ func main() {
 		stdlog.Fatal(err)
 	}
 
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(
+		version.NewCollector("thanos-receive-controller"),
+		prometheus.NewGoCollector(),
+		prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}),
+	)
+
 	var g run.Group
 	{
 		// Signal chans must be buffered.
 		sig := make(chan os.Signal, 1)
 		g.Add(func() error {
-			signal.Notify(sig, os.Interrupt, os.Kill)
+			signal.Notify(sig, os.Interrupt, os.Kill) // syscall.SIGTERM
 			<-sig
 			return nil
 		}, func(err error) {
@@ -105,7 +120,7 @@ func main() {
 			labelKey:               labelKey,
 			labelValue:             labelValue,
 		}
-		c := newController(klient, logger, opt)
+		c := newController(klient, logger, reg, opt)
 		done := make(chan struct{})
 
 		g.Add(func() error {
@@ -115,8 +130,23 @@ func main() {
 			close(done)
 		})
 	}
-	level.Info(logger).Log("msg", "starting the controller")
+	{
+		router := http.NewServeMux()
+		router.Handle("/metrics", promhttp.InstrumentMetricHandler(reg, promhttp.HandlerFor(reg, promhttp.HandlerOpts{})))
+		srv := &http.Server{Addr: config.InternalAddr, Handler: router}
 
+		g.Add(func() error {
+			return srv.ListenAndServe()
+		}, func(err error) {
+			level.Info(logger).Log("msg", "shutting down internal server")
+			ctx, _ := context.WithTimeout(context.Background(), internalServerShutdownTimeout)
+			if err := srv.Shutdown(ctx); err != nil {
+				stdlog.Fatal(err)
+			}
+		})
+	}
+
+	level.Info(logger).Log("msg", "starting the controller")
 	if err := g.Run(); err != nil {
 		stdlog.Fatal(err)
 	}
@@ -143,12 +173,33 @@ type controller struct {
 	klient  kubernetes.Interface
 	cmapInf cache.SharedIndexInformer
 	ssetInf cache.SharedIndexInformer
+
+	reconciles prometheus.Counter
+	changes    prometheus.Counter
 }
 
-func newController(klient kubernetes.Interface, logger log.Logger, o *options) *controller {
+func newController(klient kubernetes.Interface, logger log.Logger, reg *prometheus.Registry, o *options) *controller {
+	// TODO: Labels
+	reconciles := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_receiver_controller_reconcile_total",
+		Help: "Total number of reconciles.",
+	})
+	reconciles.Add(0)
+
+	changes := prometheus.NewCounter(prometheus.CounterOpts{
+		Name: "thanos_receiver_controller_configmap_changes_total",
+		Help: "Total number of configmap changes.",
+	})
+	changes.Add(0)
+
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
+
+	if reg != nil {
+		reg.MustRegister(reconciles)
+	}
+
 	return &controller{
 		options: o,
 		queue:   newQueue(),
@@ -159,6 +210,9 @@ func newController(klient kubernetes.Interface, logger log.Logger, o *options) *
 		ssetInf: appsinformers.NewFilteredStatefulSetInformer(klient, o.namespace, resyncPeriod, nil, func(lo *v1.ListOptions) {
 			lo.LabelSelector = labels.Set{o.labelKey: o.labelValue}.String()
 		}),
+
+		reconciles: reconciles,
+		changes:    changes,
 	}
 }
 
@@ -170,6 +224,7 @@ func (c *controller) run(stop <-chan struct{}) error {
 	if err := c.waitForCacheSync(stop); err != nil {
 		return err
 	}
+	// TODO: Collect gloabal informer metrics
 	c.cmapInf.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(_ interface{}) { c.queue.add() },
 		DeleteFunc: func(_ interface{}) { c.queue.add() },
@@ -187,7 +242,7 @@ func (c *controller) run(stop <-chan struct{}) error {
 }
 
 // waitForCacheSync waits for the informers' caches to be synced.
-func (c *controller) waitForCacheSync(stopc <-chan struct{}) error {
+func (c *controller) waitForCacheSync(stop <-chan struct{}) error {
 	ok := true
 	informers := []struct {
 		name     string
@@ -197,7 +252,7 @@ func (c *controller) waitForCacheSync(stopc <-chan struct{}) error {
 		{"StatefulSet", c.ssetInf},
 	}
 	for _, inf := range informers {
-		if !cache.WaitForCacheSync(stopc, inf.informer.HasSynced) {
+		if !cache.WaitForCacheSync(stop, inf.informer.HasSynced) {
 			level.Error(c.logger).Log("msg", fmt.Sprintf("failed to sync %s cache", inf.name))
 			ok = false
 		} else {
@@ -220,6 +275,10 @@ func (c *controller) worker() {
 func (c *controller) sync() {
 	configMap, ok, err := c.cmapInf.GetStore().GetByKey(fmt.Sprintf("%s/%s", c.options.namespace, c.options.configMapName))
 	if !ok || err != nil {
+		// TODO: config_map_fetch_error_total
+		// TODO: sync_error_total type=cm_fetch
+		// TODO: sync_total type=error
+		c.reconciles.Inc() // TODO: labels
 		level.Warn(c.logger).Log("msg", "could not fetch ConfigMap", "err", err, "name", c.options.configMapName)
 		return
 	}
@@ -227,6 +286,8 @@ func (c *controller) sync() {
 
 	var hashrings []receive.HashringConfig
 	if err := json.Unmarshal([]byte(cm.Data[c.options.fileName]), &hashrings); err != nil {
+		// TODO: thanos_receive_controller_sync_total type=error
+		c.reconciles.Inc() // TODO: labels
 		level.Warn(c.logger).Log("msg", "failed to decode configuration", "err", err)
 		return
 	}
@@ -238,7 +299,10 @@ func (c *controller) sync() {
 	}
 
 	c.populate(hashrings, statefulsets)
-	c.saveHashring(hashrings)
+	if err := c.saveHashring(hashrings); err != nil {
+		// TODO: check error and introduce metrics
+	}
+	c.reconciles.Inc() // TODO: labels
 }
 
 func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets map[string]*appsv1.StatefulSet) {
@@ -282,7 +346,11 @@ func (c *controller) saveHashring(hashring []receive.HashringConfig) error {
 	}
 
 	_, err = c.klient.CoreV1().ConfigMaps(c.options.namespace).Get(c.options.configMapGeneratedName, metav1.GetOptions{})
+	// TODO: thanos_receive_controller_configmap_changes verb=GET
+	c.changes.Inc() // TODO: Labels
 	if kerrors.IsNotFound(err) {
+		// TODO: thanos_receive_controller_configmap_changes verb=Create
+		c.changes.Inc() // TODO: Labels
 		_, err = c.klient.CoreV1().ConfigMaps(c.options.namespace).Create(cm)
 		return err
 	}
@@ -291,6 +359,8 @@ func (c *controller) saveHashring(hashring []receive.HashringConfig) error {
 	}
 
 	_, err = c.klient.CoreV1().ConfigMaps(c.options.namespace).Update(cm)
+	// TODO: thanos_receive_controller_configmap_changes_total verb=Update
+	c.changes.Inc() // TODO: Labels
 	return err
 }
 
