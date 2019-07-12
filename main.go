@@ -169,67 +169,115 @@ func main() {
 }
 
 type prometheusReflectorMetrics struct {
-	reg *prometheus.Registry
+	listsMetric               prometheus.Counter
+	listDurationMetric        prometheus.Summary
+	itemsInListMetric         prometheus.Summary
+	watchesMetric             prometheus.Counter
+	shortWatchesMetric        prometheus.Counter
+	watchDurationMetric       prometheus.Summary
+	itemsInWatchMetric        prometheus.Summary
+	lastResourceVersionMetric prometheus.Gauge
 }
 
 func newReflactorMetrics(reg *prometheus.Registry) prometheusReflectorMetrics {
-	return prometheusReflectorMetrics{reg}
-}
-
-func (p prometheusReflectorMetrics) counter(name string) prometheus.Counter {
-	counter := prometheus.NewCounter(prometheus.CounterOpts{
-		Name: fmt.Sprintf("thanos_receive_controller_%s", name),
-	})
-	p.reg.MustRegister(counter)
-	return counter
-}
-
-func (p prometheusReflectorMetrics) summary(name string) prometheus.Summary {
-	summary := prometheus.NewSummary(prometheus.SummaryOpts{
-		Name: fmt.Sprintf("thanos_receive_controller_%s", name),
-	})
-	p.reg.MustRegister(summary)
-	return summary
-}
-
-func (p prometheusReflectorMetrics) gauge(name string) prometheus.Gauge {
-	gauge := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: fmt.Sprintf("thanos_receive_controller_%s", name),
-	})
-	p.reg.MustRegister(gauge)
-	return gauge
+	m := prometheusReflectorMetrics{
+		listsMetric: prometheus.NewCounter(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_controller_client_cache_list_total",
+				Help: "Total number of list operations.",
+			},
+		),
+		listDurationMetric: prometheus.NewSummary(
+			prometheus.SummaryOpts{
+				Name:       "thanos_receive_controller_client_cache_list_duration_seconds",
+				Help:       "Duration of a Kubernetes API call in seconds.",
+				Objectives: map[float64]float64{},
+			},
+		),
+		itemsInListMetric: prometheus.NewSummary(
+			prometheus.SummaryOpts{
+				Name:       "thanos_receive_controller_client_cache_list_items",
+				Help:       "Count of items in a list from the Kubernetes API.",
+				Objectives: map[float64]float64{},
+			},
+		),
+		watchesMetric: prometheus.NewCounter(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_controller_client_cache_watches_total",
+				Help: "Total number of watch operations.",
+			},
+		),
+		shortWatchesMetric: prometheus.NewCounter(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_controller_client_cache_short_watches_total",
+				Help: "Total number of short watch operations.",
+			},
+		),
+		watchDurationMetric: prometheus.NewSummary(
+			prometheus.SummaryOpts{
+				Name:       "thanos_receive_controller_client_cache_watch_duration_seconds",
+				Help:       "Duration of watches on the Kubernetes API.",
+				Objectives: map[float64]float64{},
+			},
+		),
+		itemsInWatchMetric: prometheus.NewSummary(
+			prometheus.SummaryOpts{
+				Name:       "thanos_receive_controller_client_cache_watch_events",
+				Help:       "Number of items in watches on the Kubernetes API.",
+				Objectives: map[float64]float64{},
+			},
+		),
+		lastResourceVersionMetric: prometheus.NewGauge(
+			prometheus.GaugeOpts{
+				Name: "thanos_receive_controller_client_cache_last_resource_version",
+				Help: "Last resource version from the Kubernetes API.",
+			},
+		),
+	}
+	if reg != nil {
+		reg.MustRegister(
+			m.listDurationMetric,
+			m.itemsInListMetric,
+			m.watchesMetric,
+			m.shortWatchesMetric,
+			m.watchDurationMetric,
+			m.itemsInWatchMetric,
+			m.lastResourceVersionMetric,
+		)
+	}
+	return m
 }
 
 func (p prometheusReflectorMetrics) NewListsMetric(name string) cache.CounterMetric {
-	return p.counter(name)
+	return p.listsMetric
 }
 
 func (p prometheusReflectorMetrics) NewListDurationMetric(name string) cache.SummaryMetric {
-	return p.summary(name)
+	return p.listDurationMetric
 }
 
 func (p prometheusReflectorMetrics) NewItemsInListMetric(name string) cache.SummaryMetric {
-	return p.summary(name)
+	return p.itemsInListMetric
 }
 
 func (p prometheusReflectorMetrics) NewWatchesMetric(name string) cache.CounterMetric {
-	return p.counter(name)
+	return p.watchesMetric
 }
 
 func (p prometheusReflectorMetrics) NewShortWatchesMetric(name string) cache.CounterMetric {
-	return p.counter(name)
+	return p.shortWatchesMetric
 }
 
 func (p prometheusReflectorMetrics) NewWatchDurationMetric(name string) cache.SummaryMetric {
-	return p.summary(name)
+	return p.watchDurationMetric
 }
 
 func (p prometheusReflectorMetrics) NewItemsInWatchMetric(name string) cache.SummaryMetric {
-	return p.summary(name)
+	return p.itemsInWatchMetric
 }
 
 func (p prometheusReflectorMetrics) NewLastResourceVersionMetric(name string) cache.GaugeMetric {
-	return p.gauge(name)
+	return p.lastResourceVersionMetric
 }
 
 type options struct {
