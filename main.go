@@ -95,6 +95,8 @@ func main() {
 		prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}),
 	)
 
+	cache.SetReflectorMetricsProvider(newReflactorMetrics(reg))
+
 	var g run.Group
 	{
 		// Signal chans must be buffered.
@@ -156,6 +158,73 @@ func main() {
 	if err := g.Run(); err != nil {
 		stdlog.Fatal(err)
 	}
+}
+
+type prometheusReflectorMetrics struct {
+	reg *prometheus.Registry
+}
+
+func newReflactorMetrics(reg *prometheus.Registry) prometheusReflectorMetrics {
+	return prometheusReflectorMetrics{reg}
+}
+
+func (p prometheusReflectorMetrics) counter(name string) prometheus.Counter {
+	counter := prometheus.NewCounter(prometheus.CounterOpts{
+		Subsystem: "thanos-receive-controller",
+		Name:      name,
+	})
+	p.reg.MustRegister(counter)
+	return counter
+}
+
+func (p prometheusReflectorMetrics) summary(name string) prometheus.Summary {
+	summary := prometheus.NewSummary(prometheus.SummaryOpts{
+		Subsystem: "thanos-receive-controller",
+		Name:      name,
+	})
+	p.reg.MustRegister(summary)
+	return summary
+}
+
+func (p prometheusReflectorMetrics) gauge(name string) prometheus.Gauge {
+	gauge := prometheus.NewGauge(prometheus.GaugeOpts{
+		Subsystem: "thanos-receive-controller",
+		Name:      name,
+	})
+	p.reg.MustRegister(gauge)
+	return gauge
+}
+
+func (p prometheusReflectorMetrics) NewListsMetric(name string) cache.CounterMetric {
+	return p.counter(name)
+}
+
+func (p prometheusReflectorMetrics) NewListDurationMetric(name string) cache.SummaryMetric {
+	return p.summary(name)
+}
+
+func (p prometheusReflectorMetrics) NewItemsInListMetric(name string) cache.SummaryMetric {
+	return p.summary(name)
+}
+
+func (p prometheusReflectorMetrics) NewWatchesMetric(name string) cache.CounterMetric {
+	return p.counter(name)
+}
+
+func (p prometheusReflectorMetrics) NewShortWatchesMetric(name string) cache.CounterMetric {
+	return p.counter(name)
+}
+
+func (p prometheusReflectorMetrics) NewWatchDurationMetric(name string) cache.SummaryMetric {
+	return p.summary(name)
+}
+
+func (p prometheusReflectorMetrics) NewItemsInWatchMetric(name string) cache.SummaryMetric {
+	return p.summary(name)
+}
+
+func (p prometheusReflectorMetrics) NewLastResourceVersionMetric(name string) cache.GaugeMetric {
+	return p.gauge(name)
 }
 
 type options struct {
