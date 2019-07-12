@@ -34,9 +34,19 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+type Label = string
+
 const (
 	resyncPeriod                  = 5 * time.Minute
 	internalServerShutdownTimeout = time.Second
+
+	// Metric label values
+	fetch  Label = "fetch"
+	decode Label = "decode"
+	save   Label = "save"
+	create Label = "create"
+	update Label = "update"
+	other  Label = "other"
 )
 
 func main() {
@@ -168,8 +178,7 @@ func newReflactorMetrics(reg *prometheus.Registry) prometheusReflectorMetrics {
 
 func (p prometheusReflectorMetrics) counter(name string) prometheus.Counter {
 	counter := prometheus.NewCounter(prometheus.CounterOpts{
-		Subsystem: "thanos-receive-controller",
-		Name:      name,
+		Name: fmt.Sprintf("thanos_receive_controller_%s", name),
 	})
 	p.reg.MustRegister(counter)
 	return counter
@@ -177,8 +186,7 @@ func (p prometheusReflectorMetrics) counter(name string) prometheus.Counter {
 
 func (p prometheusReflectorMetrics) summary(name string) prometheus.Summary {
 	summary := prometheus.NewSummary(prometheus.SummaryOpts{
-		Subsystem: "thanos-receive-controller",
-		Name:      name,
+		Name: fmt.Sprintf("thanos_receive_controller_%s", name),
 	})
 	p.reg.MustRegister(summary)
 	return summary
@@ -186,8 +194,7 @@ func (p prometheusReflectorMetrics) summary(name string) prometheus.Summary {
 
 func (p prometheusReflectorMetrics) gauge(name string) prometheus.Gauge {
 	gauge := prometheus.NewGauge(prometheus.GaugeOpts{
-		Subsystem: "thanos-receive-controller",
-		Name:      name,
+		Name: fmt.Sprintf("thanos_receive_controller_%s", name),
 	})
 	p.reg.MustRegister(gauge)
 	return gauge
@@ -298,7 +305,13 @@ func newController(klient kubernetes.Interface, logger log.Logger, o *options) *
 func (c *controller) registerMetrics(reg *prometheus.Registry) {
 	if reg != nil {
 		c.reconcileAttempts.Add(0)
+		c.reconcileErrors.WithLabelValues(fetch).Add(0)
+		c.reconcileErrors.WithLabelValues(decode).Add(0)
+		c.reconcileErrors.WithLabelValues(save).Add(0)
 		c.configmapChangeAttempts.Add(0)
+		c.configmapChangeErrors.WithLabelValues(create).Add(0)
+		c.configmapChangeErrors.WithLabelValues(update).Add(0)
+		c.configmapChangeErrors.WithLabelValues(other).Add(0)
 		reg.MustRegister(
 			c.reconcileAttempts,
 			c.reconcileErrors,
@@ -367,7 +380,7 @@ func (c *controller) sync() {
 	c.reconcileAttempts.Inc()
 	configMap, ok, err := c.cmapInf.GetStore().GetByKey(fmt.Sprintf("%s/%s", c.options.namespace, c.options.configMapName))
 	if !ok || err != nil {
-		c.reconcileErrors.With(prometheus.Labels{"type": "fetch"}).Inc()
+		c.reconcileErrors.WithLabelValues(fetch).Inc()
 		level.Warn(c.logger).Log("msg", "could not fetch ConfigMap", "err", err, "name", c.options.configMapName)
 		return
 	}
@@ -375,7 +388,7 @@ func (c *controller) sync() {
 
 	var hashrings []receive.HashringConfig
 	if err := json.Unmarshal([]byte(cm.Data[c.options.fileName]), &hashrings); err != nil {
-		c.reconcileErrors.With(prometheus.Labels{"type": "decode"}).Inc()
+		c.reconcileErrors.WithLabelValues(decode).Inc()
 		level.Warn(c.logger).Log("msg", "failed to decode configuration", "err", err)
 		return
 	}
@@ -388,7 +401,7 @@ func (c *controller) sync() {
 
 	c.populate(hashrings, statefulsets)
 	if err := c.saveHashring(hashrings); err != nil {
-		c.reconcileErrors.With(prometheus.Labels{"type": "save"}).Inc()
+		c.reconcileErrors.WithLabelValues(save).Inc()
 		level.Error(c.logger).Log("msg", "failed to save hashrings")
 	}
 }
@@ -438,19 +451,19 @@ func (c *controller) saveHashring(hashring []receive.HashringConfig) error {
 	if kerrors.IsNotFound(err) {
 		_, err = c.klient.CoreV1().ConfigMaps(c.options.namespace).Create(cm)
 		if err != nil {
-			c.configmapChangeErrors.With(prometheus.Labels{"type": "create"}).Inc()
+			c.configmapChangeErrors.WithLabelValues(create).Inc()
 			return err
 		}
 		return nil
 	}
 	if err != nil {
-		c.configmapChangeErrors.With(prometheus.Labels{"type": "other"}).Inc()
+		c.configmapChangeErrors.WithLabelValues(other).Inc()
 		return err
 	}
 
 	_, err = c.klient.CoreV1().ConfigMaps(c.options.namespace).Update(cm)
 	if err != nil {
-		c.configmapChangeErrors.With(prometheus.Labels{"type": "update"}).Inc()
+		c.configmapChangeErrors.WithLabelValues(update).Inc()
 		return err
 	}
 
