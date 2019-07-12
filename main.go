@@ -21,7 +21,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"github.com/prometheus/common/version"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -90,7 +89,6 @@ func main() {
 
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(
-		version.NewCollector("thanos-receive-controller"),
 		prometheus.NewGoCollector(),
 		prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}),
 	)
@@ -142,7 +140,7 @@ func main() {
 		g.Add(func() error {
 			return srv.ListenAndServe()
 		}, func(err error) {
-			if err != http.ErrServerClosed {
+			if err == http.ErrServerClosed {
 				level.Warn(logger).Log("msg", "internal server closed unexpectedly")
 				return
 			}
@@ -251,8 +249,8 @@ type controller struct {
 
 	reconcileAttempts       prometheus.Counter
 	reconcileErrors         *prometheus.CounterVec
-	configmapChangeAttempts *prometheus.CounterVec
-	configmapChangeErrors   prometheus.Counter
+	configmapChangeAttempts prometheus.Counter
+	configmapChangeErrors   *prometheus.CounterVec
 }
 
 func newController(klient kubernetes.Interface, logger log.Logger, o *options) *controller {
@@ -283,26 +281,24 @@ func newController(klient kubernetes.Interface, logger log.Logger, o *options) *
 			[]string{"type"},
 		),
 
-		configmapChangeAttempts: prometheus.NewCounterVec(prometheus.CounterOpts{
+		configmapChangeAttempts: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "thanos_receive_controller_configmap_change_attempts_total",
 			Help: "Total number of configmap change attempts.",
-		},
-			[]string{"verb"},
-		),
+		}),
 
-		configmapChangeErrors: prometheus.NewCounter(prometheus.CounterOpts{
+		configmapChangeErrors: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_receive_controller_configmap_change_errors_total",
 			Help: "Total number of configmap change errors.",
-		}),
+		},
+			[]string{"type"},
+		),
 	}
 }
 
 func (c *controller) registerMetrics(reg *prometheus.Registry) {
 	if reg != nil {
 		c.reconcileAttempts.Add(0)
-		c.reconcileErrors.WithLabelValues().Add(0)
-		c.configmapChangeAttempts.WithLabelValues().Add(0)
-		c.configmapChangeErrors.Add(0)
+		c.configmapChangeAttempts.Add(0)
 		reg.MustRegister(
 			c.reconcileAttempts,
 			c.reconcileErrors,
@@ -320,7 +316,6 @@ func (c *controller) run(stop <-chan struct{}) error {
 	if err := c.waitForCacheSync(stop); err != nil {
 		return err
 	}
-	// TODO: Collect global informer metrics
 	c.cmapInf.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(_ interface{}) { c.queue.add() },
 		DeleteFunc: func(_ interface{}) { c.queue.add() },
@@ -394,7 +389,6 @@ func (c *controller) sync() {
 	c.populate(hashrings, statefulsets)
 	if err := c.saveHashring(hashrings); err != nil {
 		c.reconcileErrors.With(prometheus.Labels{"type": "save"}).Inc()
-		c.configmapChangeErrors.Inc()
 		level.Error(c.logger).Log("msg", "failed to save hashrings")
 	}
 }
@@ -439,20 +433,28 @@ func (c *controller) saveHashring(hashring []receive.HashringConfig) error {
 		BinaryData: nil,
 	}
 
+	c.configmapChangeAttempts.Inc()
 	_, err = c.klient.CoreV1().ConfigMaps(c.options.namespace).Get(c.options.configMapGeneratedName, metav1.GetOptions{})
-	c.configmapChangeAttempts.With(prometheus.Labels{"verb": "GET"}).Inc()
 	if kerrors.IsNotFound(err) {
 		_, err = c.klient.CoreV1().ConfigMaps(c.options.namespace).Create(cm)
-		c.configmapChangeAttempts.With(prometheus.Labels{"verb": "CREATE"}).Inc()
-		return err
+		if err != nil {
+			c.configmapChangeErrors.With(prometheus.Labels{"type": "create"}).Inc()
+			return err
+		}
+		return nil
 	}
 	if err != nil {
+		c.configmapChangeErrors.With(prometheus.Labels{"type": "other"}).Inc()
 		return err
 	}
 
 	_, err = c.klient.CoreV1().ConfigMaps(c.options.namespace).Update(cm)
-	c.configmapChangeAttempts.With(prometheus.Labels{"verb": "UPDATE"}).Inc()
-	return err
+	if err != nil {
+		c.configmapChangeErrors.With(prometheus.Labels{"type": "update"}).Inc()
+		return err
+	}
+
+	return nil
 }
 
 // queue is a non-blocking queue.
