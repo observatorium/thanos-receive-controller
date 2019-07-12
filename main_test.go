@@ -146,7 +146,7 @@ func TestController(t *testing.T) {
 				port:                   19291,
 				scheme:                 "http",
 			}
-			c := newController(klient, nil, nil, opts)
+			c := newController(klient, nil, opts)
 			stop := make(chan struct{})
 			defer close(stop)
 
