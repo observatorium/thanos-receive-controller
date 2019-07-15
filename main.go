@@ -34,19 +34,19 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
-type Label = string
+type label = string
 
 const (
 	resyncPeriod                  = 5 * time.Minute
 	internalServerShutdownTimeout = time.Second
 
 	// Metric label values
-	fetch  Label = "fetch"
-	decode Label = "decode"
-	save   Label = "save"
-	create Label = "create"
-	update Label = "update"
-	other  Label = "other"
+	fetch  label = "fetch"
+	decode label = "decode"
+	save   label = "save"
+	create label = "create"
+	update label = "update"
+	other  label = "other"
 )
 
 func main() {
@@ -103,7 +103,7 @@ func main() {
 		prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}),
 	)
 
-	cache.SetReflectorMetricsProvider(newReflactorMetrics(reg))
+	cache.SetReflectorMetricsProvider(newReflectorMetrics(reg))
 
 	var g run.Group
 	{
@@ -179,11 +179,11 @@ type prometheusReflectorMetrics struct {
 	lastResourceVersionMetric prometheus.Gauge
 }
 
-func newReflactorMetrics(reg *prometheus.Registry) prometheusReflectorMetrics {
+func newReflectorMetrics(reg *prometheus.Registry) prometheusReflectorMetrics {
 	m := prometheusReflectorMetrics{
 		listsMetric: prometheus.NewCounter(
 			prometheus.CounterOpts{
-				Name: "thanos_receive_controller_client_cache_list_total",
+				Name: "thanos_receive_controller_client_cache_lists_total",
 				Help: "Total number of list operations.",
 			},
 		),
