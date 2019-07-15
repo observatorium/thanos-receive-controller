@@ -1,14 +1,17 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	stdlog "log"
+	"net/http"
 	"os"
 	"os/signal"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/go-kit/kit/log"
@@ -16,6 +19,8 @@ import (
 	"github.com/improbable-eng/thanos/pkg/receive"
 	"github.com/oklog/run"
 	"github.com/pkg/errors"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
@@ -29,8 +34,19 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 )
 
+type label = string
+
 const (
-	resyncPeriod = 5 * time.Minute
+	resyncPeriod                  = 5 * time.Minute
+	internalServerShutdownTimeout = time.Second
+
+	// Metric label values
+	fetch  label = "fetch"
+	decode label = "decode"
+	save   label = "save"
+	create label = "create"
+	update label = "update"
+	other  label = "other"
 )
 
 func main() {
@@ -45,6 +61,7 @@ func main() {
 		Path                   string
 		Port                   int
 		Scheme                 string
+		InternalAddr           string
 	}{}
 
 	flag.StringVar(&config.KubeConfig, "kubeconfig", "", "Path to kubeconfig")
@@ -57,6 +74,7 @@ func main() {
 	flag.StringVar(&config.Path, "path", "/api/v1/receive", "The URL path on which receive components accept write requests")
 	flag.IntVar(&config.Port, "port", 19291, "The port on which receive components are listening for write requests")
 	flag.StringVar(&config.Scheme, "scheme", "http", "The URL scheme on which receive components accept write requests")
+	flag.StringVar(&config.InternalAddr, "internal-addr", ":8080", "The address on which internal server runs")
 	flag.Parse()
 
 	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
@@ -79,15 +97,23 @@ func main() {
 		stdlog.Fatal(err)
 	}
 
+	reg := prometheus.NewRegistry()
+	reg.MustRegister(
+		prometheus.NewGoCollector(),
+		prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}),
+	)
+
+	cache.SetReflectorMetricsProvider(newReflectorMetrics(reg))
+
 	var g run.Group
 	{
 		// Signal chans must be buffered.
 		sig := make(chan os.Signal, 1)
 		g.Add(func() error {
-			signal.Notify(sig, os.Interrupt, os.Kill)
+			signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 			<-sig
 			return nil
-		}, func(err error) {
+		}, func(_ error) {
 			level.Info(logger).Log("msg", "caught interrrupt")
 			close(sig)
 		})
@@ -106,20 +132,152 @@ func main() {
 			labelValue:             labelValue,
 		}
 		c := newController(klient, logger, opt)
+		c.registerMetrics(reg)
 		done := make(chan struct{})
 
 		g.Add(func() error {
 			return c.run(done)
-		}, func(err error) {
+		}, func(_ error) {
 			level.Info(logger).Log("msg", "shutting down controller")
 			close(done)
 		})
 	}
-	level.Info(logger).Log("msg", "starting the controller")
+	{
+		router := http.NewServeMux()
+		router.Handle("/metrics", promhttp.InstrumentMetricHandler(reg, promhttp.HandlerFor(reg, promhttp.HandlerOpts{})))
+		srv := &http.Server{Addr: config.InternalAddr, Handler: router}
 
+		g.Add(func() error {
+			return srv.ListenAndServe()
+		}, func(err error) {
+			if err == http.ErrServerClosed {
+				level.Warn(logger).Log("msg", "internal server closed unexpectedly")
+				return
+			}
+			level.Info(logger).Log("msg", "shutting down internal server")
+			ctx, _ := context.WithTimeout(context.Background(), internalServerShutdownTimeout)
+			if err := srv.Shutdown(ctx); err != nil {
+				stdlog.Fatal(err)
+			}
+		})
+	}
+
+	level.Info(logger).Log("msg", "starting the controller")
 	if err := g.Run(); err != nil {
 		stdlog.Fatal(err)
 	}
+}
+
+type prometheusReflectorMetrics struct {
+	listsMetric               prometheus.Counter
+	listDurationMetric        prometheus.Summary
+	itemsInListMetric         prometheus.Summary
+	watchesMetric             prometheus.Counter
+	shortWatchesMetric        prometheus.Counter
+	watchDurationMetric       prometheus.Summary
+	itemsInWatchMetric        prometheus.Summary
+	lastResourceVersionMetric prometheus.Gauge
+}
+
+func newReflectorMetrics(reg *prometheus.Registry) prometheusReflectorMetrics {
+	m := prometheusReflectorMetrics{
+		listsMetric: prometheus.NewCounter(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_controller_client_cache_lists_total",
+				Help: "Total number of list operations.",
+			},
+		),
+		listDurationMetric: prometheus.NewSummary(
+			prometheus.SummaryOpts{
+				Name:       "thanos_receive_controller_client_cache_list_duration_seconds",
+				Help:       "Duration of a Kubernetes API call in seconds.",
+				Objectives: map[float64]float64{},
+			},
+		),
+		itemsInListMetric: prometheus.NewSummary(
+			prometheus.SummaryOpts{
+				Name:       "thanos_receive_controller_client_cache_list_items",
+				Help:       "Count of items in a list from the Kubernetes API.",
+				Objectives: map[float64]float64{},
+			},
+		),
+		watchesMetric: prometheus.NewCounter(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_controller_client_cache_watches_total",
+				Help: "Total number of watch operations.",
+			},
+		),
+		shortWatchesMetric: prometheus.NewCounter(
+			prometheus.CounterOpts{
+				Name: "thanos_receive_controller_client_cache_short_watches_total",
+				Help: "Total number of short watch operations.",
+			},
+		),
+		watchDurationMetric: prometheus.NewSummary(
+			prometheus.SummaryOpts{
+				Name:       "thanos_receive_controller_client_cache_watch_duration_seconds",
+				Help:       "Duration of watches on the Kubernetes API.",
+				Objectives: map[float64]float64{},
+			},
+		),
+		itemsInWatchMetric: prometheus.NewSummary(
+			prometheus.SummaryOpts{
+				Name:       "thanos_receive_controller_client_cache_watch_events",
+				Help:       "Number of items in watches on the Kubernetes API.",
+				Objectives: map[float64]float64{},
+			},
+		),
+		lastResourceVersionMetric: prometheus.NewGauge(
+			prometheus.GaugeOpts{
+				Name: "thanos_receive_controller_client_cache_last_resource_version",
+				Help: "Last resource version from the Kubernetes API.",
+			},
+		),
+	}
+	if reg != nil {
+		reg.MustRegister(
+			m.listDurationMetric,
+			m.itemsInListMetric,
+			m.watchesMetric,
+			m.shortWatchesMetric,
+			m.watchDurationMetric,
+			m.itemsInWatchMetric,
+			m.lastResourceVersionMetric,
+		)
+	}
+	return m
+}
+
+func (p prometheusReflectorMetrics) NewListsMetric(name string) cache.CounterMetric {
+	return p.listsMetric
+}
+
+func (p prometheusReflectorMetrics) NewListDurationMetric(name string) cache.SummaryMetric {
+	return p.listDurationMetric
+}
+
+func (p prometheusReflectorMetrics) NewItemsInListMetric(name string) cache.SummaryMetric {
+	return p.itemsInListMetric
+}
+
+func (p prometheusReflectorMetrics) NewWatchesMetric(name string) cache.CounterMetric {
+	return p.watchesMetric
+}
+
+func (p prometheusReflectorMetrics) NewShortWatchesMetric(name string) cache.CounterMetric {
+	return p.shortWatchesMetric
+}
+
+func (p prometheusReflectorMetrics) NewWatchDurationMetric(name string) cache.SummaryMetric {
+	return p.watchDurationMetric
+}
+
+func (p prometheusReflectorMetrics) NewItemsInWatchMetric(name string) cache.SummaryMetric {
+	return p.itemsInWatchMetric
+}
+
+func (p prometheusReflectorMetrics) NewLastResourceVersionMetric(name string) cache.GaugeMetric {
+	return p.lastResourceVersionMetric
 }
 
 type options struct {
@@ -143,12 +301,18 @@ type controller struct {
 	klient  kubernetes.Interface
 	cmapInf cache.SharedIndexInformer
 	ssetInf cache.SharedIndexInformer
+
+	reconcileAttempts       prometheus.Counter
+	reconcileErrors         *prometheus.CounterVec
+	configmapChangeAttempts prometheus.Counter
+	configmapChangeErrors   *prometheus.CounterVec
 }
 
 func newController(klient kubernetes.Interface, logger log.Logger, o *options) *controller {
 	if logger == nil {
 		logger = log.NewNopLogger()
 	}
+
 	return &controller{
 		options: o,
 		queue:   newQueue(),
@@ -159,6 +323,49 @@ func newController(klient kubernetes.Interface, logger log.Logger, o *options) *
 		ssetInf: appsinformers.NewFilteredStatefulSetInformer(klient, o.namespace, resyncPeriod, nil, func(lo *v1.ListOptions) {
 			lo.LabelSelector = labels.Set{o.labelKey: o.labelValue}.String()
 		}),
+
+		reconcileAttempts: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "thanos_receive_controller_reconcile_attempts_total",
+			Help: "Total number of reconciles.",
+		}),
+
+		reconcileErrors: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "thanos_receive_controller_reconcile_errors_total",
+			Help: "Total number of reconciles errors.",
+		},
+			[]string{"type"},
+		),
+
+		configmapChangeAttempts: prometheus.NewCounter(prometheus.CounterOpts{
+			Name: "thanos_receive_controller_configmap_change_attempts_total",
+			Help: "Total number of configmap change attempts.",
+		}),
+
+		configmapChangeErrors: prometheus.NewCounterVec(prometheus.CounterOpts{
+			Name: "thanos_receive_controller_configmap_change_errors_total",
+			Help: "Total number of configmap change errors.",
+		},
+			[]string{"type"},
+		),
+	}
+}
+
+func (c *controller) registerMetrics(reg *prometheus.Registry) {
+	if reg != nil {
+		c.reconcileAttempts.Add(0)
+		c.reconcileErrors.WithLabelValues(fetch).Add(0)
+		c.reconcileErrors.WithLabelValues(decode).Add(0)
+		c.reconcileErrors.WithLabelValues(save).Add(0)
+		c.configmapChangeAttempts.Add(0)
+		c.configmapChangeErrors.WithLabelValues(create).Add(0)
+		c.configmapChangeErrors.WithLabelValues(update).Add(0)
+		c.configmapChangeErrors.WithLabelValues(other).Add(0)
+		reg.MustRegister(
+			c.reconcileAttempts,
+			c.reconcileErrors,
+			c.configmapChangeAttempts,
+			c.configmapChangeErrors,
+		)
 	}
 }
 
@@ -187,7 +394,7 @@ func (c *controller) run(stop <-chan struct{}) error {
 }
 
 // waitForCacheSync waits for the informers' caches to be synced.
-func (c *controller) waitForCacheSync(stopc <-chan struct{}) error {
+func (c *controller) waitForCacheSync(stop <-chan struct{}) error {
 	ok := true
 	informers := []struct {
 		name     string
@@ -197,7 +404,7 @@ func (c *controller) waitForCacheSync(stopc <-chan struct{}) error {
 		{"StatefulSet", c.ssetInf},
 	}
 	for _, inf := range informers {
-		if !cache.WaitForCacheSync(stopc, inf.informer.HasSynced) {
+		if !cache.WaitForCacheSync(stop, inf.informer.HasSynced) {
 			level.Error(c.logger).Log("msg", fmt.Sprintf("failed to sync %s cache", inf.name))
 			ok = false
 		} else {
@@ -218,8 +425,10 @@ func (c *controller) worker() {
 }
 
 func (c *controller) sync() {
+	c.reconcileAttempts.Inc()
 	configMap, ok, err := c.cmapInf.GetStore().GetByKey(fmt.Sprintf("%s/%s", c.options.namespace, c.options.configMapName))
 	if !ok || err != nil {
+		c.reconcileErrors.WithLabelValues(fetch).Inc()
 		level.Warn(c.logger).Log("msg", "could not fetch ConfigMap", "err", err, "name", c.options.configMapName)
 		return
 	}
@@ -227,6 +436,7 @@ func (c *controller) sync() {
 
 	var hashrings []receive.HashringConfig
 	if err := json.Unmarshal([]byte(cm.Data[c.options.fileName]), &hashrings); err != nil {
+		c.reconcileErrors.WithLabelValues(decode).Inc()
 		level.Warn(c.logger).Log("msg", "failed to decode configuration", "err", err)
 		return
 	}
@@ -238,7 +448,10 @@ func (c *controller) sync() {
 	}
 
 	c.populate(hashrings, statefulsets)
-	c.saveHashring(hashrings)
+	if err := c.saveHashring(hashrings); err != nil {
+		c.reconcileErrors.WithLabelValues(save).Inc()
+		level.Error(c.logger).Log("msg", "failed to save hashrings")
+	}
 }
 
 func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets map[string]*appsv1.StatefulSet) {
@@ -281,17 +494,28 @@ func (c *controller) saveHashring(hashring []receive.HashringConfig) error {
 		BinaryData: nil,
 	}
 
+	c.configmapChangeAttempts.Inc()
 	_, err = c.klient.CoreV1().ConfigMaps(c.options.namespace).Get(c.options.configMapGeneratedName, metav1.GetOptions{})
 	if kerrors.IsNotFound(err) {
 		_, err = c.klient.CoreV1().ConfigMaps(c.options.namespace).Create(cm)
-		return err
+		if err != nil {
+			c.configmapChangeErrors.WithLabelValues(create).Inc()
+			return err
+		}
+		return nil
 	}
 	if err != nil {
+		c.configmapChangeErrors.WithLabelValues(other).Inc()
 		return err
 	}
 
 	_, err = c.klient.CoreV1().ConfigMaps(c.options.namespace).Update(cm)
-	return err
+	if err != nil {
+		c.configmapChangeErrors.WithLabelValues(update).Inc()
+		return err
+	}
+
+	return nil
 }
 
 // queue is a non-blocking queue.
