@@ -28,6 +28,16 @@ steps:
     GO111MODULE: on
     GOPROXY: https://proxy.golang.org
 
+- name: tags
+  image: golang:1.12
+  commands:
+  - echo -n "$(git rev-parse --abbrev-ref HEAD | tr / -)-$(date +%Y-%m-%d)-$(git rev-parse --short HEAD),latest" > .tags
+  when:
+    branch:
+    - master
+    event:
+    - push
+
 - name: docker
   image: plugins/docker
   settings:
