@@ -306,6 +306,8 @@ type controller struct {
 	reconcileErrors         *prometheus.CounterVec
 	configmapChangeAttempts prometheus.Counter
 	configmapChangeErrors   *prometheus.CounterVec
+	hashringNodes           *prometheus.GaugeVec
+	hashringTenants         *prometheus.GaugeVec
 }
 
 func newController(klient kubernetes.Interface, logger log.Logger, o *options) *controller {
@@ -347,6 +349,20 @@ func newController(klient kubernetes.Interface, logger log.Logger, o *options) *
 		},
 			[]string{"type"},
 		),
+		hashringNodes: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "thanos_receive_controller_hashrings_nodes",
+				Help: "The number of nodes per hashring.",
+			},
+			[]string{"name"},
+		),
+		hashringTenants: prometheus.NewGaugeVec(
+			prometheus.GaugeOpts{
+				Name: "thanos_receive_controller_hashrings_tenants",
+				Help: "The number of tenants per hashring.",
+			},
+			[]string{"tenant"},
+		),
 	}
 }
 
@@ -365,6 +381,8 @@ func (c *controller) registerMetrics(reg *prometheus.Registry) {
 			c.reconcileErrors,
 			c.configmapChangeAttempts,
 			c.configmapChangeErrors,
+			c.hashringNodes,
+			c.hashringTenants,
 		)
 	}
 }
@@ -473,6 +491,8 @@ func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets m
 				)
 			}
 			hashrings[i].Endpoints = endpoints
+			c.hashringNodes.WithLabelValues(h.Hashring).Set(float64(len(endpoints)))
+			c.hashringNodes.WithLabelValues(h.Hashring).Set(float64(len(h.Tenants)))
 		}
 	}
 }
