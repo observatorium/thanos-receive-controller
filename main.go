@@ -351,14 +351,14 @@ func newController(klient kubernetes.Interface, logger log.Logger, o *options) *
 		),
 		hashringNodes: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: "thanos_receive_controller_hashrings_nodes",
+				Name: "thanos_receive_controller_hashring_nodes",
 				Help: "The number of nodes per hashring.",
 			},
 			[]string{"name"},
 		),
 		hashringTenants: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
-				Name: "thanos_receive_controller_hashrings_tenants",
+				Name: "thanos_receive_controller_hashring_tenants",
 				Help: "The number of tenants per hashring.",
 			},
 			[]string{"name"},
