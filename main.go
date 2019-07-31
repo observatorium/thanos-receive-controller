@@ -361,7 +361,7 @@ func newController(klient kubernetes.Interface, logger log.Logger, o *options) *
 				Name: "thanos_receive_controller_hashrings_tenants",
 				Help: "The number of tenants per hashring.",
 			},
-			[]string{"tenant"},
+			[]string{"name"},
 		),
 	}
 }
