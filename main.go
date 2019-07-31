@@ -492,7 +492,7 @@ func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets m
 			}
 			hashrings[i].Endpoints = endpoints
 			c.hashringNodes.WithLabelValues(h.Hashring).Set(float64(len(endpoints)))
-			c.hashringNodes.WithLabelValues(h.Hashring).Set(float64(len(h.Tenants)))
+			c.hashringTenants.WithLabelValues(h.Hashring).Set(float64(len(h.Tenants)))
 		}
 	}
 }
