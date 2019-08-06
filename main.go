@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/binary"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -302,12 +304,14 @@ type controller struct {
 	cmapInf cache.SharedIndexInformer
 	ssetInf cache.SharedIndexInformer
 
-	reconcileAttempts       prometheus.Counter
-	reconcileErrors         *prometheus.CounterVec
-	configmapChangeAttempts prometheus.Counter
-	configmapChangeErrors   *prometheus.CounterVec
-	hashringNodes           *prometheus.GaugeVec
-	hashringTenants         *prometheus.GaugeVec
+	reconcileAttempts                 prometheus.Counter
+	reconcileErrors                   *prometheus.CounterVec
+	configmapChangeAttempts           prometheus.Counter
+	configmapChangeErrors             *prometheus.CounterVec
+	configmapHash                     prometheus.Gauge
+	configmapLastSuccessfulChangeTime prometheus.Gauge
+	hashringNodes                     *prometheus.GaugeVec
+	hashringTenants                   *prometheus.GaugeVec
 }
 
 func newController(klient kubernetes.Interface, logger log.Logger, o *options) *controller {
@@ -330,25 +334,32 @@ func newController(klient kubernetes.Interface, logger log.Logger, o *options) *
 			Name: "thanos_receive_controller_reconcile_attempts_total",
 			Help: "Total number of reconciles.",
 		}),
-
 		reconcileErrors: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_receive_controller_reconcile_errors_total",
 			Help: "Total number of reconciles errors.",
 		},
 			[]string{"type"},
 		),
-
 		configmapChangeAttempts: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "thanos_receive_controller_configmap_change_attempts_total",
 			Help: "Total number of configmap change attempts.",
 		}),
-
 		configmapChangeErrors: prometheus.NewCounterVec(prometheus.CounterOpts{
 			Name: "thanos_receive_controller_configmap_change_errors_total",
 			Help: "Total number of configmap change errors.",
 		},
 			[]string{"type"},
 		),
+		configmapHash: prometheus.NewGauge(
+			prometheus.GaugeOpts{
+				Name: "thanos_receive_controller_configmap_hash",
+				Help: "Hash of the currently loaded configmap.",
+			}),
+		configmapLastSuccessfulChangeTime: prometheus.NewGauge(
+			prometheus.GaugeOpts{
+				Name: "thanos_receive_controller_configmap_last_reload_success_timestamp_seconds",
+				Help: "Timestamp of the last successful configmap.",
+			}),
 		hashringNodes: prometheus.NewGaugeVec(
 			prometheus.GaugeOpts{
 				Name: "thanos_receive_controller_hashring_nodes",
@@ -381,6 +392,8 @@ func (c *controller) registerMetrics(reg *prometheus.Registry) {
 			c.reconcileErrors,
 			c.configmapChangeAttempts,
 			c.configmapChangeErrors,
+			c.configmapHash,
+			c.configmapLastSuccessfulChangeTime,
 			c.hashringNodes,
 			c.hashringTenants,
 		)
@@ -535,7 +548,19 @@ func (c *controller) saveHashring(hashring []receive.HashringConfig) error {
 		return err
 	}
 
+	c.configmapLastSuccessfulChangeTime.Set(float64(time.Now().Unix()))
+	c.configmapHash.Set(hashAsMetricValue(buf))
 	return nil
+}
+
+// hashAsMetricValue generates metric value from hash of data.
+func hashAsMetricValue(data []byte) float64 {
+	sum := md5.Sum(data)
+	// We only want 48 bits as a float64 only has a 53 bit mantissa.
+	smallSum := sum[0:6]
+	var bytes = make([]byte, 8)
+	copy(bytes, smallSum)
+	return float64(binary.LittleEndian.Uint64(bytes))
 }
 
 // queue is a non-blocking queue.
