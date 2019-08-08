@@ -41,7 +41,7 @@ func TestController(t *testing.T) {
 				Tenants:  []string{"foo", "bar"},
 			}},
 			statefulsets: []*appsv1.StatefulSet{
-				&appsv1.StatefulSet{
+				{
 					ObjectMeta: metav1.ObjectMeta{Name: "hashring0", Labels: map[string]string{"a": "b"}},
 					Spec: appsv1.StatefulSetSpec{
 						Replicas:    intPointer(3),
@@ -66,14 +66,14 @@ func TestController(t *testing.T) {
 				Tenants:  []string{"foo", "bar"},
 			}},
 			statefulsets: []*appsv1.StatefulSet{
-				&appsv1.StatefulSet{
+				{
 					ObjectMeta: metav1.ObjectMeta{Name: "hashring0", Labels: map[string]string{"a": "b"}},
 					Spec: appsv1.StatefulSetSpec{
 						Replicas:    intPointer(3),
 						ServiceName: "h0",
 					},
 				},
-				&appsv1.StatefulSet{
+				{
 					ObjectMeta: metav1.ObjectMeta{Name: "hashring123"},
 					Spec: appsv1.StatefulSetSpec{
 						Replicas:    intPointer(123),
@@ -100,14 +100,14 @@ func TestController(t *testing.T) {
 				Hashring: "hashring1",
 			}},
 			statefulsets: []*appsv1.StatefulSet{
-				&appsv1.StatefulSet{
+				{
 					ObjectMeta: metav1.ObjectMeta{Name: "hashring0", Labels: map[string]string{"a": "b"}},
 					Spec: appsv1.StatefulSetSpec{
 						Replicas:    intPointer(3),
 						ServiceName: "h0",
 					},
 				},
-				&appsv1.StatefulSet{
+				{
 					ObjectMeta: metav1.ObjectMeta{Name: "hashring1", Labels: map[string]string{"a": "b"}},
 					Spec: appsv1.StatefulSetSpec{
 						Replicas:    intPointer(2),
