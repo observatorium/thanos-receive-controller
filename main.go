@@ -41,6 +41,7 @@ type label = string
 const (
 	resyncPeriod                  = 5 * time.Minute
 	internalServerShutdownTimeout = time.Second
+	hashringLabelKey              = "controller.receive.thanos.io/hashring"
 
 	// Metric label values
 	fetch  label = "fetch"
@@ -475,7 +476,11 @@ func (c *controller) sync() {
 	statefulsets := make(map[string]*appsv1.StatefulSet)
 	for _, obj := range c.ssetInf.GetStore().List() {
 		sts := obj.(*appsv1.StatefulSet)
-		statefulsets[sts.Name] = sts
+		hashring, ok := sts.Labels[hashringLabelKey]
+		if !ok {
+			continue
+		}
+		statefulsets[hashring] = sts.DeepCopy()
 	}
 
 	c.populate(hashrings, statefulsets)
@@ -491,10 +496,9 @@ func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets m
 			var endpoints []string
 			for i := 0; i < int(*sts.Spec.Replicas); i++ {
 				endpoints = append(endpoints,
-					// TODO: Make sure this is actually correct
 					fmt.Sprintf("%s://%s-%d.%s.%s.svc.%s:%d/%s",
 						c.options.scheme,
-						sts.Name,
+						h.Hashring,
 						i,
 						sts.Spec.ServiceName,
 						c.options.namespace,
