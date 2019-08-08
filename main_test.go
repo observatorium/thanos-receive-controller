@@ -35,6 +35,29 @@ func TestController(t *testing.T) {
 			expected: []receive.HashringConfig{{Hashring: "hashring0"}},
 		},
 		{
+			name: "OneHashringOneStatefulSetNoMatch",
+			hashrings: []receive.HashringConfig{{
+				Hashring: "hashring0",
+				Tenants:  []string{"foo", "bar"},
+			}},
+			statefulsets: []*appsv1.StatefulSet{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name:   "hashring0",
+						Labels: map[string]string{"a": "b"},
+					},
+					Spec: appsv1.StatefulSetSpec{
+						Replicas:    intPointer(3),
+						ServiceName: "h0",
+					},
+				},
+			},
+			expected: []receive.HashringConfig{{
+				Hashring: "hashring0",
+				Tenants:  []string{"foo", "bar"},
+			}},
+		},
+		{
 			name: "OneHashringOneStatefulSet",
 			hashrings: []receive.HashringConfig{{
 				Hashring: "hashring0",
@@ -42,7 +65,13 @@ func TestController(t *testing.T) {
 			}},
 			statefulsets: []*appsv1.StatefulSet{
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "hashring0", Labels: map[string]string{"a": "b"}},
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "thanos-receive-hashring0",
+						Labels: map[string]string{
+							"a":              "b",
+							hashringLabelKey: "hashring0",
+						},
+					},
 					Spec: appsv1.StatefulSetSpec{
 						Replicas:    intPointer(3),
 						ServiceName: "h0",
@@ -67,14 +96,26 @@ func TestController(t *testing.T) {
 			}},
 			statefulsets: []*appsv1.StatefulSet{
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "hashring0", Labels: map[string]string{"a": "b"}},
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "hashring0",
+						Labels: map[string]string{
+							"a":              "b",
+							hashringLabelKey: "hashring0",
+						},
+					},
 					Spec: appsv1.StatefulSetSpec{
 						Replicas:    intPointer(3),
 						ServiceName: "h0",
 					},
 				},
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "hashring123"},
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "hashring123",
+						Labels: map[string]string{
+							"a":              "b",
+							hashringLabelKey: "hashring123",
+						},
+					},
 					Spec: appsv1.StatefulSetSpec{
 						Replicas:    intPointer(123),
 						ServiceName: "h123",
@@ -101,14 +142,26 @@ func TestController(t *testing.T) {
 			}},
 			statefulsets: []*appsv1.StatefulSet{
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "hashring0", Labels: map[string]string{"a": "b"}},
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "hashring0",
+						Labels: map[string]string{
+							"a":              "b",
+							hashringLabelKey: "hashring0",
+						},
+					},
 					Spec: appsv1.StatefulSetSpec{
 						Replicas:    intPointer(3),
 						ServiceName: "h0",
 					},
 				},
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "hashring1", Labels: map[string]string{"a": "b"}},
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "hashring1",
+						Labels: map[string]string{
+							"a":              "b",
+							hashringLabelKey: "hashring1",
+						},
+					},
 					Spec: appsv1.StatefulSetSpec{
 						Replicas:    intPointer(2),
 						ServiceName: "h1",

@@ -62,6 +62,6 @@ spec:
 ```
 
 Finally, deploy StatefulSets of Thanos receivers labeled with `controller.receive.thanos.io=thanos-receive-controller`.
-The controller lists all of the StatefulSets with that label and matches their names to the hashring names in the configuration file.
+The controller lists all of the StatefulSets with that label and matches the value of their `controller.receive.thanos.io/hashring` labels to the hashring names in the configuration file.
 The endpoints for each hashring will be populated automatically by the controller and the complete configuration file will be placed in a ConfigMap named `thanos-receive-generated`.
 This configuration should be consumed as a ConfigMap volume by the Thanos receivers.
