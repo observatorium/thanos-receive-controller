@@ -498,7 +498,7 @@ func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets m
 				endpoints = append(endpoints,
 					fmt.Sprintf("%s://%s-%d.%s.%s.svc.%s:%d/%s",
 						c.options.scheme,
-						h.Hashring,
+						sts.Name,
 						i,
 						sts.Spec.ServiceName,
 						c.options.namespace,
