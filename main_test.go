@@ -82,9 +82,9 @@ func TestController(t *testing.T) {
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
 				Endpoints: []string{
-					"http://hashring0-0.h0.namespace.svc.cluster.local:19291/api/v1/receive",
-					"http://hashring0-1.h0.namespace.svc.cluster.local:19291/api/v1/receive",
-					"http://hashring0-2.h0.namespace.svc.cluster.local:19291/api/v1/receive",
+					"http://thanos-receive-hashring0-0.h0.namespace.svc.cluster.local:19291/api/v1/receive",
+					"http://thanos-receive-hashring0-1.h0.namespace.svc.cluster.local:19291/api/v1/receive",
+					"http://thanos-receive-hashring0-2.h0.namespace.svc.cluster.local:19291/api/v1/receive",
 				},
 			}},
 		},
