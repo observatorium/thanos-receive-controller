@@ -39,6 +39,7 @@ ${ALERTS}: jsonnet/thanos-receive-controller-mixin/mixin.libsonnet jsonnet/thano
 ${RULES}: jsonnet/thanos-receive-controller-mixin/mixin.libsonnet jsonnet/thanos-receive-controller-mixin/config.libsonnet jsonnet/thanos-receive-controller-mixin/rules/*
 	jsonnet jsonnet/thanos-receive-controller-mixin/rules.jsonnet | gojsontoyaml > $@
 
+.PHONY: vendor
 vendor: go.mod go.sum jsonnet/jsonnetfile.json jsonnet/jsonnetfile.lock.json
 	rm -rf jsonnet/vendor
 	cd jsonnet && jb install
