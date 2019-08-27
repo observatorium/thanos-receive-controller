@@ -7,14 +7,15 @@
           {
             alert: 'ThanosReceiveControllerReconcileErrorRate',
             annotations: {
-              message: 'Thanos Receive Controller failing to reconcile changes, {{ $value | humanize }} of attempts failed.',
+              message: 'Thanos Receive Controller failing to reconcile changes, {{ $value | humanize }}% of attempts failed.',
             },
             expr: |||
               sum(
                 rate(thanos_receive_controller_reconcile_errors_total{%(thanosReceiveControllerSelector)s}[5m])
                 /
+                on (namespace)
                 rate(thanos_receive_controller_reconcile_attempts_total{%(thanosReceiveControllerSelector)s}[5m])
-              ) > 0.1
+              ) * 100 >= 10
             ||| % $._config,
             'for': '5m',
             labels: {
@@ -24,14 +25,15 @@
           {
             alert: 'ThanosReceiveControllerConfigmapChangeErrorRate',
             annotations: {
-              message: 'Thanos Receive Controller failing to refresh configmap, {{ $value | humanize }} of attempts failed.',
+              message: 'Thanos Receive Controller failing to refresh configmap, {{ $value | humanize }}% of attempts failed.',
             },
             expr: |||
               sum(
                 rate(thanos_receive_controller_configmap_change_errors_total{%(thanosReceiveControllerSelector)s}[5m])
                 /
+                on (namespace)
                 rate(thanos_receive_controller_configmap_change_attempts_total{%(thanosReceiveControllerSelector)s}[5m])
-              ) > 0.1
+              ) * 100 >= 10
             ||| % $._config,
             'for': '5m',
             labels: {
@@ -41,16 +43,17 @@
           {
             alert: 'ThanosReceiveConfigStale',
             annotations: {
-              message: 'Thanos Receive Controller failing to refresh configmap, {{ $value | humanize }} of attempts failed.',
+              message: 'The configuration of the instances of Thanos Receive are stale compare to controller.',
             },
             expr: |||
-              avg(thanos_receive_config_last_reload_success_timestamp_seconds{%(thanosReceiveSelector)s}) by (job)
+              avg(thanos_receive_config_last_reload_success_timestamp_seconds{%(thanosReceiveSelector)s}) by (namespace, job)
                 <
+              on(namespace)
               thanos_receive_controller_configmap_last_reload_success_timestamp_seconds{%(thanosReceiveControllerSelector)s}
             ||| % $._config,
             'for': '5m',
             labels: {
-              severity: 'warning',
+              severity: 'critical',
             },
           },
           {

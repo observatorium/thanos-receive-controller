@@ -58,7 +58,7 @@ lint: fmt ${ALERTS} ${RULES}
 .PHONY: test ${ALERTS} ${RULES}
 test:
 	go test -v -race ./...
-	# promtool test rules tests.yaml
+	promtool test rules tests.yaml
 
 .PHONY: clean
 clean:
