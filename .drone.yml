@@ -16,7 +16,7 @@ steps:
 
 - name: lint
   pull: always
-  image: kakkoyun/go-jsonnet-ci:0.1.1
+  image: kakkoyun/go-jsonnet-ci:0.2.0
   commands:
   # This step requires golancilint, promtool and jsonnetfmt
   - make lint
@@ -30,7 +30,7 @@ steps:
 
 - name: generate
   pull: always
-  image: quay.io/coreos/jsonnet-ci:latest
+  image: kakkoyun/go-jsonnet-ci:0.2.0
   commands:
   - make --always-make generate
   - git diff --exit-code
