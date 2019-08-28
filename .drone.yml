@@ -9,30 +9,31 @@ platform:
 steps:
 - name: test
   pull: always
-  image: golang:1.12
+  image: kakkoyun/go-promtool:2.12.0
   commands:
-  - go test -v -race ./...
-  environment:
-    # -race requires cgo
-    CGO_ENABLED: 1
-    GO111MODULE: on
-    GOPROXY: https://proxy.golang.org
+  # This step requires >=go1.12 and promtool
+  - make test
 
-- name: fmt
+- name: lint
   pull: always
-  image: golang:1.12
+  image: kakkoyun/go-jsonnet-ci:0.1.1
   commands:
-  - fmt_res=$(gofmt -d -s $(find . -type f -name '*.go' -not -path './vendor/*')); if [ -n "$fmt_res" ]; then printf '\nGofmt found style issues. Please check the reported issues\nand fix them if necessary before submitting the code for review:\n\n%s' "$fmt_res"; exit 1; fi
+  # This step requires golancilint, promtool and jsonnetfmt
+  - make lint
+  - git diff --exit-code
 
 - name: build
   pull: always
   image: golang:1.12
   commands:
-  - go build -v
-  environment:
-    CGO_ENABLED: 0
-    GO111MODULE: on
-    GOPROXY: https://proxy.golang.org
+  - make thanos-receive-controller
+
+- name: generate
+  pull: always
+  image: quay.io/coreos/jsonnet-ci:latest
+  commands:
+  - make --always-make generate
+  - git diff --exit-code
 
 - name: tags
   image: golang:1.12

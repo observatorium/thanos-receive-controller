@@ -19,7 +19,7 @@ CONTAINER_CMD:=docker run --rm \
 all: generate fmt thanos-receive-controller
 
 thanos-receive-controller: main.go
-	go build -v
+	CGO_ENABLED=0 GO111MODULE=on GOPROXY=https://proxy.golang.org go build -v
 
 .PHONY: generate
 generate: ${ALERTS} ${RULES} ${DASHBOARDS}
@@ -59,7 +59,7 @@ lint: fmt ${ALERTS} ${RULES}
 
 .PHONY: test ${ALERTS} ${RULES}
 test:
-	go test -v -race ./...
+	CGO_ENABLED=1 GO111MODULE=on GOPROXY=https://proxy.golang.org go test -v -race ./...
 	promtool test rules tests.yaml
 
 .PHONY: clean
