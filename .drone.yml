@@ -30,7 +30,7 @@ steps:
 
 - name: generate
   pull: always
-  image: quay.io/coreos/jsonnet-ci:late
+  image: quay.io/coreos/jsonnet-ci:latest
   commands:
   - make --always-make generate
   - git diff --exit-code
