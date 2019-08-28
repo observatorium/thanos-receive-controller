@@ -30,7 +30,7 @@ steps:
 
 - name: generate
   pull: always
-  image: kakkoyun/go-jsonnet-ci:0.2.0
+  image: quay.io/coreos/jsonnet-ci:late
   commands:
   - make --always-make generate
   - git diff --exit-code
