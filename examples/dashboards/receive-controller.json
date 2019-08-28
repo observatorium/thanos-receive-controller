@@ -15,8 +15,7 @@
          "panels": [
             {
                "aliasColors": {
-                  "error": "#E24D42",
-                  "success": "#7EB26D"
+                  "error": "#E24D42"
                },
                "bars": false,
                "dashLength": 10,
@@ -54,14 +53,6 @@
                      "legendFormat": "error",
                      "refId": "A",
                      "step": 10
-                  },
-                  {
-                     "expr": "(sum(rate(thanos_receive_controller_reconcile_attempts_total{namespace=\"$namespace\",job=~\"thanos-receive-controller.*\"}[$interval])) - sum(rate(thanos_receive_controller_reconcile_errors_total{namespace=\"$namespace\",job=~\"thanos-receive-controller.*\"}[$interval]))) / sum(rate(thanos_receive_controller_reconcile_attempts_total{namespace=\"$namespace\",job=~\"thanos-receive-controller.*\"}[$interval]))",
-                     "format": "time_series",
-                     "intervalFactor": 2,
-                     "legendFormat": "success",
-                     "refId": "B",
-                     "step": 10
                   }
                ],
                "thresholds": [ ],
@@ -86,7 +77,7 @@
                      "format": "percentunit",
                      "label": null,
                      "logBase": 1,
-                     "max": 1,
+                     "max": null,
                      "min": 0,
                      "show": true
                   },
@@ -190,8 +181,7 @@
          "panels": [
             {
                "aliasColors": {
-                  "error": "#E24D42",
-                  "success": "#7EB26D"
+                  "error": "#E24D42"
                },
                "bars": false,
                "dashLength": 10,
@@ -229,14 +219,6 @@
                      "legendFormat": "error",
                      "refId": "A",
                      "step": 10
-                  },
-                  {
-                     "expr": "(sum(rate(thanos_receive_controller_configmap_change_attempts_total{namespace=\"$namespace\",job=~\"thanos-receive-controller.*\"}[$interval])) - sum(rate(thanos_receive_controller_configmap_change_errors_total{namespace=\"$namespace\",job=~\"thanos-receive-controller.*\"}[$interval]))) / sum(rate(thanos_receive_controller_configmap_change_attempts_total{namespace=\"$namespace\",job=~\"thanos-receive-controller.*\"}[$interval]))",
-                     "format": "time_series",
-                     "intervalFactor": 2,
-                     "legendFormat": "success",
-                     "refId": "B",
-                     "step": 10
                   }
                ],
                "thresholds": [ ],
@@ -261,7 +243,7 @@
                      "format": "percentunit",
                      "label": null,
                      "logBase": 1,
-                     "max": 1,
+                     "max": null,
                      "min": 0,
                      "show": true
                   },
@@ -441,8 +423,7 @@
             },
             {
                "aliasColors": {
-                  "error": "#E24D42",
-                  "success": "#7EB26D"
+                  "error": "#E24D42"
                },
                "bars": false,
                "dashLength": 10,
@@ -480,14 +461,6 @@
                      "legendFormat": "error",
                      "refId": "A",
                      "step": 10
-                  },
-                  {
-                     "expr": "(sum(rate(thanos_receive_hashrings_file_changes_total{namespace=\"$namespace\",job=~\"thanos-receive.*\"}[$interval])) - sum(rate(thanos_receive_hashrings_file_errors_total{namespace=\"$namespace\",job=~\"thanos-receive.*\"}[$interval]))) / sum(rate(thanos_receive_hashrings_file_changes_total{namespace=\"$namespace\",job=~\"thanos-receive.*\"}[$interval]))",
-                     "format": "time_series",
-                     "intervalFactor": 2,
-                     "legendFormat": "success",
-                     "refId": "B",
-                     "step": 10
                   }
                ],
                "thresholds": [ ],
@@ -512,7 +485,7 @@
                      "format": "percentunit",
                      "label": null,
                      "logBase": 1,
-                     "max": 1,
+                     "max": null,
                      "min": 0,
                      "show": true
                   },
