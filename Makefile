@@ -18,11 +18,11 @@ CONTAINER_CMD:=docker run --rm \
 
 all: generate fmt thanos-receive-controller
 
-thanos-receive-controller: main.go
-	CGO_ENABLED=0 GO111MODULE=on GOPROXY=https://proxy.golang.org go build -v
+thanos-receive-controller: vendor main.go
+	CGO_ENABLED=0 GO111MODULE=on GOPROXY=https://proxy.golang.org go build -mod vendor -v
 
 .PHONY: generate
-generate: ${ALERTS} ${RULES} ${DASHBOARDS}
+generate: vendor ${ALERTS} ${RULES} ${DASHBOARDS}
 
 .PHONY: generate-in-docker
 generate-in-docker:
@@ -42,7 +42,7 @@ ${RULES}: jsonnet/thanos-receive-controller-mixin/mixin.libsonnet jsonnet/thanos
 	jsonnet jsonnet/thanos-receive-controller-mixin/rules.jsonnet | gojsontoyaml > $@
 
 .PHONY: vendor
-vendor: go.mod go.sum jsonnet/jsonnetfile.json jsonnet/jsonnetfile.lock.json
+vendor: go.mod go.sum jsonnet/jsonnetfile.json
 	rm -rf jsonnet/vendor
 	cd jsonnet && jb install
 	go mod vendor
