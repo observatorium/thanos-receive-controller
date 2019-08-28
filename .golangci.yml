@@ -1,0 +1,12 @@
+run:
+  # default concurrency is a available CPU number
+  concurrency: 4
+  # timeout for analysis, e.g. 30s, 5m, default is 1m
+  deadline: 2m
+  tests: true
+
+linters-settings:
+  errcheck:
+    exclude: .errcheck_excludes.txt
+  lll:
+    line-length: 200

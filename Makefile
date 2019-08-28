@@ -54,7 +54,7 @@ fmt:
 
 .PHONY: lint
 lint: fmt ${ALERTS} ${RULES}
-	golangci-lint run -v --enable-all -D lll -D errcheck
+	golangci-lint run -v --enable-all
 	promtool check rules ${ALERTS} ${RULES}
 
 .PHONY: test ${ALERTS} ${RULES}
