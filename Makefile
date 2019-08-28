@@ -29,7 +29,9 @@ generate-in-docker:
 	@echo ">> Compiling assets and generating Kubernetes manifests"
 	$(CONTAINER_CMD) make $(MFLAGS) generate
 
+.PHONY: ${DASHBOARDS}
 ${DASHBOARDS}: jsonnet/thanos-receive-controller-mixin/mixin.libsonnet jsonnet/thanos-receive-controller-mixin/config.libsonnet jsonnet/thanos-receive-controller-mixin/dashboards/*
+	@rm -rf ${DASHBOARDS}
 	@mkdir -p ${DASHBOARDS}
 	jsonnet -J jsonnet/vendor -m ${DASHBOARDS} jsonnet/thanos-receive-controller-mixin/dashboards.jsonnet
 
