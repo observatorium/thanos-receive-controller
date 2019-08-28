@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"crypto/md5"
+	"crypto/md5" //nolint:gosec
 	"encoding/binary"
 	"encoding/json"
 	"flag"
@@ -150,18 +150,18 @@ func main() {
 		router.Handle("/metrics", promhttp.InstrumentMetricHandler(reg, promhttp.HandlerFor(reg, promhttp.HandlerOpts{})))
 		srv := &http.Server{Addr: config.InternalAddr, Handler: router}
 
-		g.Add(func() error {
-			return srv.ListenAndServe()
-		}, func(err error) {
+		g.Add(srv.ListenAndServe, func(err error) {
 			if err == http.ErrServerClosed {
 				level.Warn(logger).Log("msg", "internal server closed unexpectedly")
 				return
 			}
 			level.Info(logger).Log("msg", "shutting down internal server")
-			ctx, _ := context.WithTimeout(context.Background(), internalServerShutdownTimeout)
+			ctx, cancel := context.WithTimeout(context.Background(), internalServerShutdownTimeout)
 			if err := srv.Shutdown(ctx); err != nil {
+				cancel()
 				stdlog.Fatal(err)
 			}
+			cancel()
 		})
 	}
 
@@ -559,7 +559,7 @@ func (c *controller) saveHashring(hashring []receive.HashringConfig) error {
 
 // hashAsMetricValue generates metric value from hash of data.
 func hashAsMetricValue(data []byte) float64 {
-	sum := md5.Sum(data)
+	sum := md5.Sum(data) //nolint:gosec
 	// We only want 48 bits as a float64 only has a 53 bit mantissa.
 	smallSum := sum[0:6]
 	var bytes = make([]byte, 8)

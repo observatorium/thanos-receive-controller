@@ -185,7 +185,11 @@ func TestController(t *testing.T) {
 			}},
 		},
 	} {
-		t.Run(tt.name, func(t *testing.T) {
+		hashrings := tt.hashrings
+		statefulsets := tt.statefulsets
+		expected := tt.expected
+		name := tt.name
+		t.Run(name, func(t *testing.T) {
 			klient := fake.NewSimpleClientset()
 			opts := &options{
 				labelKey:               "a",
@@ -203,13 +207,14 @@ func TestController(t *testing.T) {
 			stop := make(chan struct{})
 			defer close(stop)
 
+			//nolint:staticcheck
 			go func() {
 				if err := c.run(stop); err != nil {
 					t.Fatalf("got unexpected error: %v", err)
 				}
 			}()
 
-			buf, err := json.Marshal(tt.hashrings)
+			buf, err := json.Marshal(hashrings)
 			if err != nil {
 				t.Fatalf("got unexpected error marshaling initial hashrings: %v", err)
 			}
@@ -227,7 +232,7 @@ func TestController(t *testing.T) {
 				t.Fatalf("got unexpected error creating ConfigMap: %v", err)
 			}
 
-			for _, sts := range tt.statefulsets {
+			for _, sts := range statefulsets {
 				if _, err := klient.AppsV1().StatefulSets(opts.namespace).Create(sts); err != nil {
 					t.Fatalf("got unexpected error creating StatefulSet: %v", err)
 				}
@@ -240,13 +245,13 @@ func TestController(t *testing.T) {
 				t.Fatalf("got unexpected error getting ConfigMap: %v", err)
 			}
 
-			buf, err = json.Marshal(tt.expected)
+			buf, err = json.Marshal(expected)
 			if err != nil {
 				t.Fatalf("got unexpected error marshaling expected hashrings: %v", err)
 			}
 
 			if cm.Data[opts.fileName] != string(buf) {
-				t.Errorf("the expected config does not match the actual config\ncase:\t%q\ngiven:\t%+v\nexpected:\t%+v\n", tt.name, cm.Data[opts.fileName], string(buf))
+				t.Errorf("the expected config does not match the actual config\ncase:\t%q\ngiven:\t%+v\nexpected:\t%+v\n", name, cm.Data[opts.fileName], string(buf))
 			}
 		})
 	}
