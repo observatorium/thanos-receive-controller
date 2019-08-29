@@ -9,14 +9,14 @@ platform:
 steps:
 - name: test
   pull: always
-  image: kakkoyun/go-promtool:2.12.0
+  image: quay.io/coreos/jsonnet-ci:latest
   commands:
   # This step requires >=go1.12 and promtool
   - make test
 
 - name: lint
   pull: always
-  image: kakkoyun/go-jsonnet-ci:0.2.0
+  image: quay.io/coreos/jsonnet-ci:latest
   commands:
   # This step requires golancilint, promtool and jsonnetfmt
   - make lint
