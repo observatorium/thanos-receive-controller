@@ -52,8 +52,8 @@ jsonnet-vendor: jsonnet/jsonnetfile.json
 
 .PHONY: fmt
 fmt:
-	@test -z $(shell fmt_res=$(gofmt -d -s ${SRC})) || printf '\nGofmt found style issues. Please check the reported issues\nand fix them if necessary before submitting the code for review:\n\n%s' "$(fmt_res)"
-	echo ${JSONNET_SRC} | xargs -n 1 -- $(JSONNET_FMT) -i
+	@fmt_res=$$(gofmt -d -s $$(find . -type f -name '*.go' -not -path './vendor/*')); if [ -n "$$fmt_res" ]; then printf '\nGofmt found style issues. Please check the reported issues\nand fix them if necessary before submitting the code for review:\n\n%s' "$$fmt_res"; exit 1; fi
+	@echo ${JSONNET_SRC} | xargs -n 1 -- $(JSONNET_FMT) -i
 
 .PHONY: lint
 lint: fmt ${ALERTS} ${RULES}
