@@ -1,0 +1,72 @@
+rule_files:
+  - examples/alerts.yaml
+  - examples/rules.yaml
+
+evaluation_interval: 1m
+
+tests:
+- interval: 1m
+  input_series:
+  - series: 'thanos_receive_controller_reconcile_errors_total{job="thanos-receive-controller", pod="thanos-receive-controller-pod-0"}'
+    values: '2 7 15 15 24 25'
+  - series: 'thanos_receive_controller_reconcile_attempts_total{job="thanos-receive-controller", pod="thanos-receive-controller-pod-1"}'
+    values: '10 20 30 40 50 60'
+  - series: 'thanos_receive_controller_configmap_change_errors_total{job="thanos-receive-controller", pod="thanos-receive-controller-pod-0"}'
+    values: '1 2 3 4 5 6'
+  - series: 'thanos_receive_controller_configmap_change_attempts_total{job="thanos-receive-controller", pod="thanos-receive-controller-pod-1"}'
+    values: '10 20 30 40 50 60'
+  - series: 'thanos_receive_config_last_reload_success_timestamp_seconds{namespace="production", job="thanos-receive-default", pod="thanos-controller-pod-0"}'
+    values: '1566910000 1566910000 1566910000 1566910000 1566910000 1566910000'
+  - series: 'thanos_receive_controller_configmap_last_reload_success_timestamp_seconds{namespace="production", job="thanos-receive-controller", pod="thanos-receive-controller-pod-1"}'
+    values: '1566910547 1566910547 1566910547 1566910547 1566910547 1566910547'
+  - series: 'thanos_receive_config_hash{namespace="production", job="thanos-receive-default", pod="thanos-receive-pod-0"}'
+    values: '1 1 1 1 1 1'
+  - series: 'thanos_receive_controller_configmap_hash{namespace="production", job="thanos-receive-controller", pod="thanos-receive-controller-pod-1"}'
+    values: '1 2 2 2 2 2'
+  promql_expr_test:
+    - expr: time()
+      eval_time: 1m
+      exp_samples:
+        - labels: '{}'
+          value: 60
+  alert_rule_test:
+  - eval_time: 4m
+    alertname: ThanosReceiveControllerReconcileErrorRate
+  - eval_time: 4m
+    alertname: ThanosReceiveControllerConfigmapChangeErrorRate
+  - eval_time: 4m
+    alertname: ThanosReceiveConfigStale
+  - eval_time: 4m
+    alertname: ThanosReceiveConfigInconsistent
+
+  - eval_time: 6m
+    alertname: ThanosReceiveControllerReconcileErrorRate
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+      exp_annotations:
+        message: 'Thanos Receive Controller failing to reconcile changes, 45% of attempts failed.'
+  - eval_time: 6m
+    alertname: ThanosReceiveControllerConfigmapChangeErrorRate
+    exp_alerts:
+    - exp_labels:
+        severity: warning
+      exp_annotations:
+        message: 'Thanos Receive Controller failing to refresh configmap, 10% of attempts failed.'
+  - eval_time: 6m
+    alertname: ThanosReceiveConfigStale
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        namespace: 'production'
+      exp_annotations:
+        message: 'The configuration of the instances of Thanos Receive are stale compare to controller.'
+  - eval_time: 6m
+    alertname: ThanosReceiveConfigInconsistent
+    exp_alerts:
+    - exp_labels:
+        severity: critical
+        job: 'thanos-receive-default'
+        namespace: 'production'
+      exp_annotations:
+        message: 'The configuration of the instances of Thanos Receive `thanos-receive-default` are out of sync.'

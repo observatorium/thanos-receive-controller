@@ -1,0 +1,43 @@
+{
+    "dependencies": [
+        {
+            "name": "thanos-receive-controller-mixin",
+            "source": {
+                "local": {
+                    "directory": "thanos-receive-controller-mixin"
+                }
+            },
+            "version": "."
+        },
+        {
+            "name": "thanos-mixin",
+            "source": {
+                "git": {
+                    "remote": "https://github.com/metalmatze/kube-thanos",
+                    "subdir": "jsonnet/thanos-mixin"
+                }
+            },
+            "version": "master"
+        },
+        {
+            "name": "grafonnet",
+            "source": {
+                "git": {
+                    "remote": "https://github.com/grafana/grafonnet-lib",
+                    "subdir": "grafonnet"
+                }
+            },
+            "version": "master"
+        },
+        {
+            "name": "grafana-builder",
+            "source": {
+                "git": {
+                    "remote": "https://github.com/grafana/jsonnet-libs",
+                    "subdir": "grafana-builder"
+                }
+            },
+            "version": "master"
+        }
+    ]
+}
