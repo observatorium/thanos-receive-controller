@@ -9,6 +9,7 @@ import (
 	"fmt"
 	stdlog "log"
 	"net/http"
+	"net/http/pprof"
 	"os"
 	"os/signal"
 	"strings"
@@ -148,6 +149,8 @@ func main() {
 	{
 		router := http.NewServeMux()
 		router.Handle("/metrics", promhttp.InstrumentMetricHandler(reg, promhttp.HandlerFor(reg, promhttp.HandlerOpts{})))
+		router.HandleFunc("/debug/pprof/", pprof.Index)
+
 		srv := &http.Server{Addr: config.InternalAddr, Handler: router}
 
 		g.Add(srv.ListenAndServe, func(err error) {
