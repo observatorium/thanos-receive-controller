@@ -1,4 +1,5 @@
 EXAMPLES := examples
+MANIFESTS := ${EXAMPLES}/manifests/
 DASHBOARDS := ${EXAMPLES}/dashboards/
 ALERTS := ${EXAMPLES}/alerts.yaml
 RULES := ${EXAMPLES}/rules.yaml
@@ -22,12 +23,18 @@ thanos-receive-controller: go-vendor main.go
 	CGO_ENABLED=0 GO111MODULE=on GOPROXY=https://proxy.golang.org go build -mod vendor -v
 
 .PHONY: generate
-generate: jsonnet-vendor ${ALERTS} ${RULES} ${DASHBOARDS}
+generate: jsonnet-vendor ${ALERTS} ${RULES} ${DASHBOARDS} ${MANIFESTS}
 
 .PHONY: generate-in-docker
 generate-in-docker:
 	@echo ">> Compiling assets and generating Kubernetes manifests"
 	$(CONTAINER_CMD) make $(MFLAGS) generate
+
+.PHONY: ${MANIFESTS}
+${MANIFESTS}: jsonnet/main.jsonnet jsonnet/tenants.libsonnet jsonnet/lib/*
+	@rm -rf ${MANIFESTS}
+	@mkdir -p ${MANIFESTS}
+	jsonnet -J jsonnet/vendor -m ${MANIFESTS} jsonnet/main.jsonnet | xargs -I{} sh -c 'cat {} | gojsontoyaml > {}.yaml && rm -f {}' -- {}
 
 .PHONY: ${DASHBOARDS}
 ${DASHBOARDS}: jsonnet/thanos-receive-controller-mixin/mixin.libsonnet jsonnet/thanos-receive-controller-mixin/config.libsonnet jsonnet/thanos-receive-controller-mixin/dashboards/*
