@@ -1,6 +1,16 @@
 {
     "dependencies": [
         {
+            "name": "ksonnet",
+            "source": {
+                "git": {
+                    "remote": "https://github.com/ksonnet/ksonnet-lib",
+                    "subdir": ""
+                }
+            },
+            "version": "0d2f82676817bbf9e4acf6495b2090205f323b9f"
+        },
+        {
             "name": "thanos-receive-controller-mixin",
             "source": {
                 "local": {
