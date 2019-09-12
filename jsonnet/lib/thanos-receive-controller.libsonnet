@@ -3,7 +3,7 @@ local k = import 'ksonnet/ksonnet.beta.4/k.libsonnet';
 {
   _config+:: {
     namespace:: 'observatorium',
-    version:: 'master-2019-08-09-c8204c0',
+    version:: 'latest',
     imageRepo:: 'quay.io/observatorium/thanos-receive-controller',
   },
   thanos+:: {
