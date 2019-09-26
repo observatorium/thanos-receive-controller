@@ -13,7 +13,7 @@
               sum(
                 rate(thanos_receive_controller_reconcile_errors_total{%(thanosReceiveControllerSelector)s}[5m])
                 /
-                on (namespace)
+                on (namespace) group_left
                 rate(thanos_receive_controller_reconcile_attempts_total{%(thanosReceiveControllerSelector)s}[5m])
               ) * 100 >= 10
             ||| % $._config,
@@ -31,7 +31,7 @@
               sum(
                 rate(thanos_receive_controller_configmap_change_errors_total{%(thanosReceiveControllerSelector)s}[5m])
                 /
-                on (namespace)
+                on (namespace) group_left
                 rate(thanos_receive_controller_configmap_change_attempts_total{%(thanosReceiveControllerSelector)s}[5m])
               ) * 100 >= 10
             ||| % $._config,
