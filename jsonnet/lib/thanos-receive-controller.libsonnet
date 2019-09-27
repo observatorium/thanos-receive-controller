@@ -101,6 +101,23 @@ local k = import 'ksonnet/ksonnet.beta.4/k.libsonnet';
         deployment.mixin.metadata.withLabels({ 'app.kubernetes.io/name': $.thanos.receiveController.deployment.metadata.name }) +
         deployment.mixin.spec.template.spec.withServiceAccount($.thanos.receiveController.serviceAccount.metadata.name) +
         deployment.mixin.spec.selector.withMatchLabels($.thanos.receiveController.deployment.metadata.labels),
+
+      serviceMonitor+: {
+        apiVersion: 'monitoring.coreos.com/v1',
+        kind: 'ServiceMonitor',
+        metadata+: {
+          name: 'thanos-receive-controller',
+          namespace: $._config.namespace,
+        },
+        spec: {
+          selector: {
+            matchLabels: $.thanos.receiveController.service.metadata.labels,
+          },
+          endpoints: [
+            { port: 'http' },
+          ],
+        },
+      },
     },
   },
 }
