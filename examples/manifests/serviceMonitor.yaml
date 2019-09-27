@@ -2,7 +2,7 @@ apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
   name: thanos-receive-controller
-  namespace: monitoring
+  namespace: observatorium
 spec:
   endpoints:
   - port: http

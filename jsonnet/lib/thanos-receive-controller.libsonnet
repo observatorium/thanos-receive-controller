@@ -107,7 +107,7 @@ local k = import 'ksonnet/ksonnet.beta.4/k.libsonnet';
         kind: 'ServiceMonitor',
         metadata+: {
           name: 'thanos-receive-controller',
-          namespace: 'monitoring',
+          namespace: $._config.namespace,
         },
         spec: {
           selector: {
