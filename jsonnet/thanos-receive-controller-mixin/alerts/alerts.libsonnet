@@ -41,22 +41,6 @@
             },
           },
           {
-            alert: 'ThanosReceiveConfigStale',
-            annotations: {
-              message: 'The configuration of the instances of Thanos Receive are stale compare to controller.',
-            },
-            expr: |||
-              avg(thanos_receive_config_last_reload_success_timestamp_seconds{%(thanosReceiveSelector)s}) by (namespace, job)
-                <
-              on(namespace)
-              thanos_receive_controller_configmap_last_reload_success_timestamp_seconds{%(thanosReceiveControllerSelector)s}
-            ||| % $._config,
-            'for': '5m',
-            labels: {
-              severity: 'critical',
-            },
-          },
-          {
             alert: 'ThanosReceiveConfigInconsistent',
             annotations: {
               message: 'The configuration of the instances of Thanos Receive `{{$labels.job}}` are out of sync.',

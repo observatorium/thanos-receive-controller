@@ -35,10 +35,7 @@ tests:
   - eval_time: 4m
     alertname: ThanosReceiveControllerConfigmapChangeErrorRate
   - eval_time: 4m
-    alertname: ThanosReceiveConfigStale
-  - eval_time: 4m
     alertname: ThanosReceiveConfigInconsistent
-
   - eval_time: 6m
     alertname: ThanosReceiveControllerReconcileErrorRate
     exp_alerts:
@@ -53,14 +50,6 @@ tests:
         severity: warning
       exp_annotations:
         message: 'Thanos Receive Controller failing to refresh configmap, 10% of attempts failed.'
-  - eval_time: 6m
-    alertname: ThanosReceiveConfigStale
-    exp_alerts:
-    - exp_labels:
-        severity: critical
-        namespace: 'production'
-      exp_annotations:
-        message: 'The configuration of the instances of Thanos Receive are stale compare to controller.'
   - eval_time: 6m
     alertname: ThanosReceiveConfigInconsistent
     exp_alerts:
