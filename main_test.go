@@ -10,6 +10,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/kubernetes/fake"
 )
 
@@ -203,9 +204,8 @@ func TestController(t *testing.T) {
 				port:                   19291,
 				scheme:                 "http",
 			}
-
 			klient := fake.NewSimpleClientset()
-			_, cleanUp := setup(t, klient, opts)
+			cleanUp := setup(t, klient, opts)
 			defer cleanUp()
 
 			_ = createOriginalConfigMap(t, klient, opts, hashrings, statefulsets)
@@ -278,7 +278,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 				scheme:                 "http",
 			}
 			klient := fake.NewSimpleClientset()
-			_, cleanUp := setup(t, klient, opts)
+			cleanUp := setup(t, klient, opts)
 			defer cleanUp()
 
 			cm := createOriginalConfigMap(t, klient, opts,
@@ -308,7 +308,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 
 			// Manually change properties of generated configmap.
 			gcm.Labels = labels
-			if gcm, err = klient.CoreV1().ConfigMaps(opts.namespace).Update(gcm); err != nil {
+			if _, err = klient.CoreV1().ConfigMaps(opts.namespace).Update(gcm); err != nil {
 				t.Fatalf("got unexpected error updating ConfigMap: %v", err)
 			}
 
@@ -345,7 +345,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 	}
 }
 
-func setup(t *testing.T, klient *fake.Clientset, opts *options) (*controller, func()) {
+func setup(t *testing.T, klient kubernetes.Interface, opts *options) func() {
 	c := newController(klient, nil, opts)
 	stop := make(chan struct{})
 
@@ -356,12 +356,12 @@ func setup(t *testing.T, klient *fake.Clientset, opts *options) (*controller, fu
 		}
 	}()
 
-	return c, func() {
+	return func() {
 		close(stop)
 	}
 }
 
-func createOriginalConfigMap(t *testing.T, klient *fake.Clientset, opts *options, hashrings []receive.HashringConfig, statefulsets []*appsv1.StatefulSet) *corev1.ConfigMap {
+func createOriginalConfigMap(t *testing.T, klient kubernetes.Interface, opts *options, hashrings []receive.HashringConfig, statefulsets []*appsv1.StatefulSet) *corev1.ConfigMap {
 	buf, err := json.Marshal(hashrings)
 	if err != nil {
 		t.Fatalf("got unexpected error marshaling initial hashrings: %v", err)

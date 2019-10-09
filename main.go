@@ -111,14 +111,14 @@ func main() {
 
 	var g run.Group
 	{
-		// Signal chans must be buffered.
+		// Signal channels must be buffered.
 		sig := make(chan os.Signal, 1)
 		g.Add(func() error {
 			signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 			<-sig
 			return nil
 		}, func(_ error) {
-			level.Info(logger).Log("msg", "caught interrrupt")
+			level.Info(logger).Log("msg", "caught interrupt")
 			close(sig)
 		})
 	}
