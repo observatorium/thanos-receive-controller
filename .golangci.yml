@@ -10,3 +10,6 @@ linters-settings:
     exclude: .errcheck_excludes.txt
   lll:
     line-length: 200
+  funlen:
+    lines: 210
+    statements: 50
