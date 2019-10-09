@@ -208,7 +208,7 @@ func TestController(t *testing.T) {
 			cleanUp := setup(t, klient, opts)
 			defer cleanUp()
 
-			_ = createOriginalConfigMap(t, klient, opts, hashrings, statefulsets)
+			_ = createInitialResources(t, klient, opts, hashrings, statefulsets)
 
 			// Reconciliation is async, so we need to wait a bit.
 			<-time.After(500 * time.Millisecond)
@@ -235,7 +235,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 		Tenants:  []string{"foo", "bar"},
 	}}
 	intendedLabels := map[string]string{
-		"manuel": "change",
+		"manual": "change",
 	}
 
 	for _, tt := range []struct {
@@ -245,7 +245,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 		shouldBeUpdated bool
 	}{
 		{
-			name: "ConfigMapWithHashringChange",
+			name: "ConfigMapWithDifferentHashring",
 			hashrings: []receive.HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar", "baz"},
@@ -254,7 +254,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 			shouldBeUpdated: true,
 		},
 		{
-			name:            "ConfigMapWithOtherChange",
+			name:            "ConfigMapWithSameHashringAndOtherChanges",
 			hashrings:       originalHashrings,
 			labels:          intendedLabels,
 			shouldBeUpdated: false,
@@ -281,7 +281,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 			cleanUp := setup(t, klient, opts)
 			defer cleanUp()
 
-			cm := createOriginalConfigMap(t, klient, opts,
+			cm := createInitialResources(t, klient, opts,
 				originalHashrings,
 				[]*appsv1.StatefulSet{
 					{
@@ -361,7 +361,7 @@ func setup(t *testing.T, klient kubernetes.Interface, opts *options) func() {
 	}
 }
 
-func createOriginalConfigMap(t *testing.T, klient kubernetes.Interface, opts *options, hashrings []receive.HashringConfig, statefulsets []*appsv1.StatefulSet) *corev1.ConfigMap {
+func createInitialResources(t *testing.T, klient kubernetes.Interface, opts *options, hashrings []receive.HashringConfig, statefulsets []*appsv1.StatefulSet) *corev1.ConfigMap {
 	buf, err := json.Marshal(hashrings)
 	if err != nil {
 		t.Fatalf("got unexpected error marshaling initial hashrings: %v", err)
@@ -375,7 +375,6 @@ func createOriginalConfigMap(t *testing.T, klient kubernetes.Interface, opts *op
 		Data: map[string]string{
 			opts.fileName: string(buf),
 		},
-		BinaryData: nil,
 	}
 	if _, err := klient.CoreV1().ConfigMaps(opts.namespace).Create(cm); err != nil {
 		t.Fatalf("got unexpected error creating ConfigMap: %v", err)
