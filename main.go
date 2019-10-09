@@ -111,14 +111,14 @@ func main() {
 
 	var g run.Group
 	{
-		// Signal chans must be buffered.
+		// Signal channels must be buffered.
 		sig := make(chan os.Signal, 1)
 		g.Add(func() error {
 			signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
 			<-sig
 			return nil
 		}, func(_ error) {
-			level.Info(logger).Log("msg", "caught interrrupt")
+			level.Info(logger).Log("msg", "caught interrupt")
 			close(sig)
 		})
 	}
@@ -535,18 +535,24 @@ func (c *controller) saveHashring(hashring []receive.HashringConfig) error {
 	}
 
 	c.configmapChangeAttempts.Inc()
-	_, err = c.klient.CoreV1().ConfigMaps(c.options.namespace).Get(c.options.configMapGeneratedName, metav1.GetOptions{})
+	gcm, err := c.klient.CoreV1().ConfigMaps(c.options.namespace).Get(c.options.configMapGeneratedName, metav1.GetOptions{})
 	if kerrors.IsNotFound(err) {
 		_, err = c.klient.CoreV1().ConfigMaps(c.options.namespace).Create(cm)
 		if err != nil {
 			c.configmapChangeErrors.WithLabelValues(create).Inc()
 			return err
 		}
+		c.configmapLastSuccessfulChangeTime.Set(float64(time.Now().Unix()))
+		c.configmapHash.Set(hashAsMetricValue(buf))
 		return nil
 	}
 	if err != nil {
 		c.configmapChangeErrors.WithLabelValues(other).Inc()
 		return err
+	}
+
+	if gcm.Data[c.options.fileName] == cm.Data[c.options.fileName] {
+		return nil
 	}
 
 	_, err = c.klient.CoreV1().ConfigMaps(c.options.namespace).Update(cm)
