@@ -205,10 +205,10 @@ func TestController(t *testing.T) {
 				scheme:                 "http",
 			}
 			klient := fake.NewSimpleClientset()
-			cleanUp := setup(t, klient, opts)
+			cleanUp := setupController(t, klient, opts)
 			defer cleanUp()
 
-			_ = createOriginalConfigMap(t, klient, opts, hashrings, statefulsets)
+			_ = createInitialResources(t, klient, opts, hashrings, statefulsets)
 
 			// Reconciliation is async, so we need to wait a bit.
 			<-time.After(500 * time.Millisecond)
@@ -233,9 +233,14 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 	originalHashrings := []receive.HashringConfig{{
 		Hashring: "hashring0",
 		Tenants:  []string{"foo", "bar"},
+		Endpoints: []string{
+			"http://thanos-receive-hashring0-0.h0.namespace.svc.cluster.local:19291/api/v1/receive",
+			"http://thanos-receive-hashring0-1.h0.namespace.svc.cluster.local:19291/api/v1/receive",
+			"http://thanos-receive-hashring0-2.h0.namespace.svc.cluster.local:19291/api/v1/receive",
+		},
 	}}
 	intendedLabels := map[string]string{
-		"manuel": "change",
+		"manual": "change",
 	}
 
 	for _, tt := range []struct {
@@ -245,7 +250,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 		shouldBeUpdated bool
 	}{
 		{
-			name: "ConfigMapWithHashringChange",
+			name: "DifferentHashring",
 			hashrings: []receive.HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar", "baz"},
@@ -254,7 +259,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 			shouldBeUpdated: true,
 		},
 		{
-			name:            "ConfigMapWithOtherChange",
+			name:            "KeepLabels",
 			hashrings:       originalHashrings,
 			labels:          intendedLabels,
 			shouldBeUpdated: false,
@@ -278,10 +283,8 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 				scheme:                 "http",
 			}
 			klient := fake.NewSimpleClientset()
-			cleanUp := setup(t, klient, opts)
-			defer cleanUp()
 
-			cm := createOriginalConfigMap(t, klient, opts,
+			cm := createInitialResources(t, klient, opts,
 				originalHashrings,
 				[]*appsv1.StatefulSet{
 					{
@@ -299,29 +302,26 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 					},
 				})
 
-			// Reconciliation is async, so we need to wait a bit.
-			<-time.After(500 * time.Millisecond)
-			gcm, err := klient.CoreV1().ConfigMaps(opts.namespace).Get(opts.configMapGeneratedName, metav1.GetOptions{})
-			if err != nil {
-				t.Fatalf("got unexpected error getting ConfigMap: %v", err)
-			}
-
-			// Manually change properties of generated configmap.
-			gcm.Labels = labels
-			if _, err = klient.CoreV1().ConfigMaps(opts.namespace).Update(gcm); err != nil {
-				t.Fatalf("got unexpected error updating ConfigMap: %v", err)
-			}
-
 			buf, err := json.Marshal(hashrings)
 			if err != nil {
-				t.Fatalf("got unexpected error marshaling initial hashrings: %v", err)
+				t.Fatalf("got unexpected error marshaling hashrings: %v", err)
 			}
-			cm.Data = map[string]string{
-				opts.fileName: string(buf),
+			gcm := &corev1.ConfigMap{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      opts.configMapGeneratedName,
+					Namespace: opts.namespace,
+					Labels:    labels,
+				},
+				Data: map[string]string{
+					opts.fileName: string(buf),
+				},
 			}
-			if cm, err = klient.CoreV1().ConfigMaps(opts.namespace).Update(cm); err != nil {
-				t.Fatalf("got unexpected error updating ConfigMap: %v", err)
+			if gcm, err = klient.CoreV1().ConfigMaps(opts.namespace).Create(gcm); err != nil {
+				t.Fatalf("got unexpected error creating ConfigMap: %v", err)
 			}
+
+			cleanUp := setupController(t, klient, opts)
+			defer cleanUp()
 
 			// Reconciliation is async, so we need to wait a bit.
 			<-time.After(500 * time.Millisecond)
@@ -345,7 +345,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 	}
 }
 
-func setup(t *testing.T, klient kubernetes.Interface, opts *options) func() {
+func setupController(t *testing.T, klient kubernetes.Interface, opts *options) func() {
 	c := newController(klient, nil, opts)
 	stop := make(chan struct{})
 
@@ -361,7 +361,7 @@ func setup(t *testing.T, klient kubernetes.Interface, opts *options) func() {
 	}
 }
 
-func createOriginalConfigMap(t *testing.T, klient kubernetes.Interface, opts *options, hashrings []receive.HashringConfig, statefulsets []*appsv1.StatefulSet) *corev1.ConfigMap {
+func createInitialResources(t *testing.T, klient kubernetes.Interface, opts *options, hashrings []receive.HashringConfig, statefulsets []*appsv1.StatefulSet) *corev1.ConfigMap {
 	buf, err := json.Marshal(hashrings)
 	if err != nil {
 		t.Fatalf("got unexpected error marshaling initial hashrings: %v", err)
@@ -375,7 +375,6 @@ func createOriginalConfigMap(t *testing.T, klient kubernetes.Interface, opts *op
 		Data: map[string]string{
 			opts.fileName: string(buf),
 		},
-		BinaryData: nil,
 	}
 	if _, err := klient.CoreV1().ConfigMaps(opts.namespace).Create(cm); err != nil {
 		t.Fatalf("got unexpected error creating ConfigMap: %v", err)
