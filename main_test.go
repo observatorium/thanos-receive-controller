@@ -245,7 +245,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 		shouldBeUpdated bool
 	}{
 		{
-			name: "ConfigMapWithDifferentHashring",
+			name: "DifferentHashring",
 			hashrings: []receive.HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar", "baz"},
@@ -254,7 +254,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 			shouldBeUpdated: true,
 		},
 		{
-			name:            "ConfigMapWithSameHashringAndOtherChanges",
+			name:            "KeepLabels",
 			hashrings:       originalHashrings,
 			labels:          intendedLabels,
 			shouldBeUpdated: false,
