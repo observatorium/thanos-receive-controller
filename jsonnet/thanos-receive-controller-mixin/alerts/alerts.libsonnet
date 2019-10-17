@@ -5,6 +5,19 @@
         name: 'thanos-receive-controller.rules',
         rules: [
           {
+            alert: 'ThanosReceiveControllerIsDown',
+            expr: |||
+              absent(up{%(thanosReceiveControllerSelector)s} == 1)
+            ||| % $._config,
+            'for': '5m',
+            labels: {
+              severity: 'critical',
+            },
+            annotations: {
+              message: 'Thanos Receive Controller has disappeared from Prometheus target discovery.',
+            },
+          },
+          {
             alert: 'ThanosReceiveControllerReconcileErrorRate',
             annotations: {
               message: 'Thanos Receive Controller failing to reconcile changes, {{ $value | humanize }}% of attempts failed.',

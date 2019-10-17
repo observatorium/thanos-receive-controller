@@ -1,6 +1,14 @@
 groups:
 - name: thanos-receive-controller.rules
   rules:
+  - alert: ThanosReceiveControllerIsDown
+    annotations:
+      message: Thanos Receive Controller has disappeared from Prometheus target discovery.
+    expr: |
+      absent(up{job=~"thanos-receive-controller.*"} == 1)
+    for: 5m
+    labels:
+      severity: critical
   - alert: ThanosReceiveControllerReconcileErrorRate
     annotations:
       message: Thanos Receive Controller failing to reconcile changes, {{ $value |
