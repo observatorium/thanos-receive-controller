@@ -534,6 +534,7 @@ func (c *controller) saveHashring(hashring []receive.HashringConfig) error {
 		BinaryData: nil,
 	}
 
+	c.configmapHash.Set(hashAsMetricValue(buf))
 	c.configmapChangeAttempts.Inc()
 	gcm, err := c.klient.CoreV1().ConfigMaps(c.options.namespace).Get(c.options.configMapGeneratedName, metav1.GetOptions{})
 	if kerrors.IsNotFound(err) {
@@ -543,7 +544,6 @@ func (c *controller) saveHashring(hashring []receive.HashringConfig) error {
 			return err
 		}
 		c.configmapLastSuccessfulChangeTime.Set(float64(time.Now().Unix()))
-		c.configmapHash.Set(hashAsMetricValue(buf))
 		return nil
 	}
 	if err != nil {
@@ -562,7 +562,6 @@ func (c *controller) saveHashring(hashring []receive.HashringConfig) error {
 	}
 
 	c.configmapLastSuccessfulChangeTime.Set(float64(time.Now().Unix()))
-	c.configmapHash.Set(hashAsMetricValue(buf))
 	return nil
 }
 
