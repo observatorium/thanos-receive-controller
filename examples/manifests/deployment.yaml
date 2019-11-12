@@ -36,6 +36,6 @@ spec:
             cpu: 64m
             memory: 128Mi
           requests:
-            cpu: 32m
-            memory: 32Mi
+            cpu: 10m
+            memory: 24Mi
       serviceAccount: thanos-receive-controller

@@ -94,7 +94,7 @@ local k = import 'ksonnet/ksonnet.beta.4/k.libsonnet';
           container.withEnv([
             env.fromFieldPath('NAMESPACE', 'metadata.namespace'),
           ]) +
-          container.mixin.resources.withRequests({ cpu: '32m', memory: '32Mi' }) +
+          container.mixin.resources.withRequests({ cpu: '10m', memory: '24Mi' }) +
           container.mixin.resources.withLimits({ cpu: '64m', memory: '128Mi' }) +
           container.withPorts(
             containerPort.newNamed(8080, 'http')
