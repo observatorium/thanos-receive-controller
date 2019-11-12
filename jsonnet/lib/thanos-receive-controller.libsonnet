@@ -90,9 +90,13 @@ local k = import 'ksonnet/ksonnet.beta.4/k.libsonnet';
             '--configmap-generated-name=%s-generated' % $.thanos.receiveController.configmap.metadata.name,
             '--file-name=hashrings.json',
             '--namespace=$(NAMESPACE)',
-          ]) + container.withEnv([
+          ]) +
+          container.withEnv([
             env.fromFieldPath('NAMESPACE', 'metadata.namespace'),
-          ]) + container.withPorts(
+          ]) +
+          container.mixin.resources.withRequests({ cpu: '10m', memory: '24Mi' }) +
+          container.mixin.resources.withLimits({ cpu: '64m', memory: '128Mi' }) +
+          container.withPorts(
             containerPort.newNamed(8080, 'http')
           );
 
