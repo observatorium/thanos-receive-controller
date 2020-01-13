@@ -62,7 +62,6 @@ func main() {
 		ConfigMapName          string
 		ConfigMapGeneratedName string
 		FileName               string
-		Path                   string
 		Port                   int
 		Scheme                 string
 		InternalAddr           string
@@ -75,8 +74,7 @@ func main() {
 	flag.StringVar(&config.ConfigMapName, "configmap-name", "", "The name of the original ConfigMap containing the hashring tenant configuration")
 	flag.StringVar(&config.ConfigMapGeneratedName, "configmap-generated-name", "", "The name of the generated and populated ConfigMap")
 	flag.StringVar(&config.FileName, "file-name", "", "The name of the configuration file in the ConfigMap")
-	flag.StringVar(&config.Path, "path", "/api/v1/receive", "The URL path on which receive components accept write requests")
-	flag.IntVar(&config.Port, "port", 19291, "The port on which receive components are listening for write requests")
+	flag.IntVar(&config.Port, "port", 10901, "The port on which receive components are listening for write requests")
 	flag.StringVar(&config.Scheme, "scheme", "http", "The URL scheme on which receive components accept write requests")
 	flag.StringVar(&config.InternalAddr, "internal-addr", ":8080", "The address on which internal server runs")
 	flag.Parse()
@@ -129,7 +127,6 @@ func main() {
 			configMapGeneratedName: config.ConfigMapGeneratedName,
 			fileName:               config.FileName,
 			namespace:              config.Namespace,
-			path:                   config.Path,
 			port:                   config.Port,
 			scheme:                 config.Scheme,
 			labelKey:               labelKey,
@@ -296,7 +293,6 @@ type options struct {
 	configMapGeneratedName string
 	fileName               string
 	namespace              string
-	path                   string
 	port                   int
 	scheme                 string
 	labelKey               string
@@ -503,15 +499,14 @@ func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets m
 			var endpoints []string
 			for i := 0; i < int(*sts.Spec.Replicas); i++ {
 				endpoints = append(endpoints,
-					fmt.Sprintf("%s://%s-%d.%s.%s.svc.%s:%d/%s",
-						c.options.scheme,
+					fmt.Sprintf("%s-%d.%s.%s.svc.%s:%d",
 						sts.Name,
 						i,
 						sts.Spec.ServiceName,
 						c.options.namespace,
 						c.options.clusterDomain,
 						c.options.port,
-						strings.TrimPrefix(c.options.path, "/")),
+					),
 				)
 			}
 			hashrings[i].Endpoints = endpoints
