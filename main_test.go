@@ -84,9 +84,9 @@ func TestController(t *testing.T) {
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
 				Endpoints: []string{
-					"http://thanos-receive-hashring0-0.h0.namespace.svc.cluster.local:19291/api/v1/receive",
-					"http://thanos-receive-hashring0-1.h0.namespace.svc.cluster.local:19291/api/v1/receive",
-					"http://thanos-receive-hashring0-2.h0.namespace.svc.cluster.local:19291/api/v1/receive",
+					"thanos-receive-hashring0-0.h0.namespace.svc.cluster.local:10901",
+					"thanos-receive-hashring0-1.h0.namespace.svc.cluster.local:10901",
+					"thanos-receive-hashring0-2.h0.namespace.svc.cluster.local:10901",
 				},
 			}},
 		},
@@ -128,9 +128,9 @@ func TestController(t *testing.T) {
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
 				Endpoints: []string{
-					"http://hashring0-0.h0.namespace.svc.cluster.local:19291/api/v1/receive",
-					"http://hashring0-1.h0.namespace.svc.cluster.local:19291/api/v1/receive",
-					"http://hashring0-2.h0.namespace.svc.cluster.local:19291/api/v1/receive",
+					"hashring0-0.h0.namespace.svc.cluster.local:10901",
+					"hashring0-1.h0.namespace.svc.cluster.local:10901",
+					"hashring0-2.h0.namespace.svc.cluster.local:10901",
 				},
 			}},
 		},
@@ -174,15 +174,15 @@ func TestController(t *testing.T) {
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
 				Endpoints: []string{
-					"http://hashring0-0.h0.namespace.svc.cluster.local:19291/api/v1/receive",
-					"http://hashring0-1.h0.namespace.svc.cluster.local:19291/api/v1/receive",
-					"http://hashring0-2.h0.namespace.svc.cluster.local:19291/api/v1/receive",
+					"hashring0-0.h0.namespace.svc.cluster.local:10901",
+					"hashring0-1.h0.namespace.svc.cluster.local:10901",
+					"hashring0-2.h0.namespace.svc.cluster.local:10901",
 				},
 			}, {
 				Hashring: "hashring1",
 				Endpoints: []string{
-					"http://hashring1-0.h1.namespace.svc.cluster.local:19291/api/v1/receive",
-					"http://hashring1-1.h1.namespace.svc.cluster.local:19291/api/v1/receive",
+					"hashring1-0.h1.namespace.svc.cluster.local:10901",
+					"hashring1-1.h1.namespace.svc.cluster.local:10901",
 				},
 			}},
 		},
@@ -200,8 +200,7 @@ func TestController(t *testing.T) {
 				configMapName:          "original",
 				configMapGeneratedName: "generated",
 				namespace:              "namespace",
-				path:                   "/api/v1/receive",
-				port:                   19291,
+				port:                   10901,
 				scheme:                 "http",
 			}
 			klient := fake.NewSimpleClientset()
@@ -234,9 +233,9 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 		Hashring: "hashring0",
 		Tenants:  []string{"foo", "bar"},
 		Endpoints: []string{
-			"http://thanos-receive-hashring0-0.h0.namespace.svc.cluster.local:19291/api/v1/receive",
-			"http://thanos-receive-hashring0-1.h0.namespace.svc.cluster.local:19291/api/v1/receive",
-			"http://thanos-receive-hashring0-2.h0.namespace.svc.cluster.local:19291/api/v1/receive",
+			"thanos-receive-hashring0-0.h0.namespace.svc.cluster.local:10901",
+			"thanos-receive-hashring0-1.h0.namespace.svc.cluster.local:10901",
+			"thanos-receive-hashring0-2.h0.namespace.svc.cluster.local:10901",
 		},
 	}}
 	intendedLabels := map[string]string{
@@ -278,8 +277,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 				configMapName:          "original",
 				configMapGeneratedName: "generated",
 				namespace:              "namespace",
-				path:                   "/api/v1/receive",
-				port:                   19291,
+				port:                   10901,
 				scheme:                 "http",
 			}
 			klient := fake.NewSimpleClientset()
