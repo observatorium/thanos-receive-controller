@@ -48,6 +48,18 @@ local k = import 'ksonnet/ksonnet.beta.4/k.libsonnet';
       ]) +
       rules.withVerbs(['list', 'watch', 'get', 'create', 'update']),
       rules.new() +
+      rules.withApiGroups(['']) +
+      rules.withResources([
+        'pods',
+      ]) +
+      rules.withVerbs(['list', 'watch']),
+      rules.new() +
+      rules.withApiGroups(['batch']) +
+      rules.withResources([
+        'jobs',
+      ]) +
+      rules.withVerbs(['create', 'delete', 'get']),
+      rules.new() +
       rules.withApiGroups(['apps']) +
       rules.withResources([
         'statefulsets',
