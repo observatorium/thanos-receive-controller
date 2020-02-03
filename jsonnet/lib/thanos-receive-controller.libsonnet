@@ -1,126 +1,144 @@
 local k = import 'ksonnet/ksonnet.beta.4/k.libsonnet';
 
 {
-  _config+:: {
-    namespace:: 'observatorium',
-    version:: 'latest',
-    imageRepo:: 'quay.io/observatorium/thanos-receive-controller',
+  local trc = self,
+
+  config:: {
+    name: error 'must provide name',
+    namespace: error 'must provide namespace',
+    version: error 'must provide version',
+    image: error 'must provide image',
+    replicas: error 'must provide replicas',
+    hashrings: error 'must provide hashring configuration',
+
+    commonLabels:: {
+      'app.kubernetes.io/name': 'thanos',
+      'app.kubernetes.io/instance': trc.config.name,
+      'app.kubernetes.io/version': 'v' + trc.config.version,
+      'app.kubernetes.io/component': 'thanos-receive-controller',
+    },
+
+    podLabelSelector:: {
+      [labelName]: trc.config.commonLabels[labelName]
+      for labelName in std.objectFields(trc.config.commonLabels)
+      if !std.setMember(labelName, ['app.kubernetes.io/version'])
+    },
   },
-  thanos+:: {
-    receiveController: {
-      serviceAccount:
-        local sa = k.core.v1.serviceAccount;
+  serviceAccount:
+    local sa = k.core.v1.serviceAccount;
 
-        sa.new() +
-        sa.mixin.metadata.withName('thanos-receive-controller') +
-        sa.mixin.metadata.withNamespace($._config.namespace),
+    sa.new() +
+    sa.mixin.metadata.withName(trc.config.name) +
+    sa.mixin.metadata.withNamespace(trc.config.namespace) +
+    sa.mixin.metadata.withLabels(trc.config.commonLabels),
 
-      role:
-        local role = k.rbac.v1.role;
-        local rules = role.rulesType;
+  role:
+    local role = k.rbac.v1.role;
+    local rules = role.rulesType;
 
-        role.new() +
-        role.mixin.metadata.withName('thanos-receive-controller') +
-        role.mixin.metadata.withNamespace($._config.namespace) +
-        role.withRules([
-          rules.new() +
-          rules.withApiGroups(['']) +
-          rules.withResources([
-            'configmaps',
-          ]) +
-          rules.withVerbs(['list', 'watch', 'get', 'create', 'update']),
-          rules.new() +
-          rules.withApiGroups(['apps']) +
-          rules.withResources([
-            'statefulsets',
-          ]) +
-          rules.withVerbs(['list', 'watch', 'get']),
-        ]),
+    role.new() +
+    role.mixin.metadata.withName(trc.config.name) +
+    role.mixin.metadata.withNamespace(trc.config.namespace) +
+    role.mixin.metadata.withLabels(trc.config.commonLabels) +
+    role.withRules([
+      rules.new() +
+      rules.withApiGroups(['']) +
+      rules.withResources([
+        'configmaps',
+      ]) +
+      rules.withVerbs(['list', 'watch', 'get', 'create', 'update']),
+      rules.new() +
+      rules.withApiGroups(['apps']) +
+      rules.withResources([
+        'statefulsets',
+      ]) +
+      rules.withVerbs(['list', 'watch', 'get']),
+    ]),
 
-      roleBinding:
-        local rb = k.rbac.v1.roleBinding;
+  roleBinding:
+    local rb = k.rbac.v1.roleBinding;
 
-        rb.new() +
-        rb.mixin.metadata.withName('thanos-receive-controller') +
-        rb.mixin.metadata.withNamespace($._config.namespace) +
-        rb.mixin.roleRef.withApiGroup('rbac.authorization.k8s.io') +
-        rb.mixin.roleRef.withName($.thanos.receiveController.role.metadata.name) +
-        rb.mixin.roleRef.mixinInstance({ kind: 'Role' }) +
-        rb.withSubjects([{
-          kind: 'ServiceAccount',
-          name: $.thanos.receiveController.serviceAccount.metadata.name,
-          namespace: $.thanos.receiveController.serviceAccount.metadata.namespace,
-        }]),
+    rb.new() +
+    rb.mixin.metadata.withName(trc.config.name) +
+    rb.mixin.metadata.withNamespace(trc.config.namespace) +
+    rb.mixin.metadata.withLabels(trc.config.commonLabels) +
+    rb.mixin.roleRef.withApiGroup('rbac.authorization.k8s.io') +
+    rb.mixin.roleRef.withName(trc.role.metadata.name) +
+    rb.mixin.roleRef.mixinInstance({ kind: 'Role' }) +
+    rb.withSubjects([{
+      kind: 'ServiceAccount',
+      name: trc.serviceAccount.metadata.name,
+      namespace: trc.serviceAccount.metadata.namespace,
+    }]),
 
-      configmap:
-        local configmap = k.core.v1.configMap;
+  configmap:
+    local configmap = k.core.v1.configMap;
 
-        configmap.new() +
-        configmap.mixin.metadata.withName('observatorium-tenants') +
-        configmap.mixin.metadata.withNamespace($._config.namespace) +
-        configmap.mixin.metadata.withLabels({ 'app.kubernetes.io/name': $.thanos.receiveController.deployment.metadata.name }) +
-        configmap.withData({
-          'hashrings.json': std.manifestJsonEx((import '../tenants.libsonnet'), '  '),
-        }),
+    configmap.new() +
+    configmap.mixin.metadata.withName(trc.config.name + '-tenants') +
+    configmap.mixin.metadata.withNamespace(trc.config.namespace) +
+    configmap.mixin.metadata.withLabels(trc.config.commonLabels) +
+    configmap.withData({
+      'hashrings.json': std.manifestJsonEx(trc.config.hashrings, '  '),
+    }),
 
-      service:
-        local service = k.core.v1.service;
-        local ports = service.mixin.spec.portsType;
+  service:
+    local service = k.core.v1.service;
+    local ports = service.mixin.spec.portsType;
 
-        service.new(
-          'thanos-receive-controller',
-          $.thanos.receiveController.deployment.metadata.labels,
-          [
-            ports.newNamed('http', 8080, 8080),
-          ],
-        ) +
-        service.mixin.metadata.withNamespace($._config.namespace) +
-        service.mixin.metadata.withLabels({ 'app.kubernetes.io/name': $.thanos.receiveController.deployment.metadata.name }),
+    service.new(
+      trc.config.name,
+      trc.config.podLabelSelector,
+      [
+        ports.newNamed('http', 8080, 8080),
+      ],
+    ) +
+    service.mixin.metadata.withNamespace(trc.config.namespace) +
+    service.mixin.metadata.withLabels(trc.config.commonLabels),
 
-      deployment:
-        local deployment = k.apps.v1.deployment;
-        local container = deployment.mixin.spec.template.spec.containersType;
-        local containerPort = container.portsType;
-        local env = container.envType;
+  deployment:
+    local deployment = k.apps.v1.deployment;
+    local container = deployment.mixin.spec.template.spec.containersType;
+    local containerPort = container.portsType;
+    local env = container.envType;
 
-        local c =
-          container.new($.thanos.receiveController.deployment.metadata.name, '%s:%s' % [$._config.imageRepo, $._config.version]) +
-          container.withArgs([
-            '--configmap-name=%s' % $.thanos.receiveController.configmap.metadata.name,
-            '--configmap-generated-name=%s-generated' % $.thanos.receiveController.configmap.metadata.name,
-            '--file-name=hashrings.json',
-            '--namespace=$(NAMESPACE)',
-          ]) +
-          container.withEnv([
-            env.fromFieldPath('NAMESPACE', 'metadata.namespace'),
-          ]) +
-          container.mixin.resources.withRequests({ cpu: '10m', memory: '24Mi' }) +
-          container.mixin.resources.withLimits({ cpu: '64m', memory: '128Mi' }) +
-          container.withPorts(
-            containerPort.newNamed(8080, 'http')
-          );
+    local c =
+      container.new('thanos-receive-controller', trc.config.image) +
+      container.withArgs([
+        '--configmap-name=%s' % trc.configmap.metadata.name,
+        '--configmap-generated-name=%s-generated' % trc.configmap.metadata.name,
+        '--file-name=hashrings.json',
+        '--namespace=$(NAMESPACE)',
+      ]) +
+      container.withEnv([
+        env.fromFieldPath('NAMESPACE', 'metadata.namespace'),
+      ]) +
+      container.withPorts(
+        containerPort.newNamed(8080, 'http')
+      );
 
-        deployment.new('thanos-receive-controller', 1, c, $.thanos.receiveController.deployment.metadata.labels) +
-        deployment.mixin.metadata.withNamespace($._config.namespace) +
-        deployment.mixin.metadata.withLabels({ 'app.kubernetes.io/name': $.thanos.receiveController.deployment.metadata.name }) +
-        deployment.mixin.spec.template.spec.withServiceAccount($.thanos.receiveController.serviceAccount.metadata.name) +
-        deployment.mixin.spec.selector.withMatchLabels($.thanos.receiveController.deployment.metadata.labels),
+    deployment.new(trc.config.name, 1, c, trc.config.commonLabels) +
+    deployment.mixin.metadata.withNamespace(trc.config.namespace) +
+    deployment.mixin.metadata.withLabels(trc.config.commonLabels) +
+    deployment.mixin.spec.template.spec.withServiceAccount(trc.serviceAccount.metadata.name) +
+    deployment.mixin.spec.selector.withMatchLabels(trc.config.podLabelSelector),
 
-      serviceMonitor+: {
-        apiVersion: 'monitoring.coreos.com/v1',
-        kind: 'ServiceMonitor',
-        metadata+: {
-          name: 'thanos-receive-controller',
-          namespace: $._config.namespace,
+  withServiceMonitor:: {
+    local trc = self,
+    serviceMonitor: {
+      apiVersion: 'monitoring.coreos.com/v1',
+      kind: 'ServiceMonitor',
+      metadata+: {
+        name: trc.config.name,
+        namespace: trc.config.namespace,
+      },
+      spec: {
+        selector: {
+          matchLabels: trc.config.commonLabels,
         },
-        spec: {
-          selector: {
-            matchLabels: $.thanos.receiveController.service.metadata.labels,
-          },
-          endpoints: [
-            { port: 'http' },
-          ],
-        },
+        endpoints: [
+          { port: 'http' },
+        ],
       },
     },
   },
