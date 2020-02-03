@@ -14,7 +14,7 @@ local k = import 'ksonnet/ksonnet.beta.4/k.libsonnet';
     commonLabels:: {
       'app.kubernetes.io/name': 'thanos',
       'app.kubernetes.io/instance': trc.config.name,
-      'app.kubernetes.io/version': 'v' + trc.config.version,
+      'app.kubernetes.io/version': trc.config.version,
       'app.kubernetes.io/component': 'thanos-receive-controller',
     },
 
@@ -139,6 +139,28 @@ local k = import 'ksonnet/ksonnet.beta.4/k.libsonnet';
         endpoints: [
           { port: 'http' },
         ],
+      },
+    },
+  },
+
+  withResources:: {
+    local trc = self,
+    config+:: {
+      resources: error 'must provide resources',
+    },
+
+    deployment+: {
+      spec+: {
+        template+: {
+          spec+: {
+            containers: [
+              if c.name == 'thanos-receive-controller' then c {
+                resources: trc.config.resources,
+              } else c
+              for c in super.containers
+            ],
+          },
+        },
       },
     },
   },

@@ -5,7 +5,7 @@ metadata:
     app.kubernetes.io/component: thanos-receive-controller
     app.kubernetes.io/instance: thanos-receive-controller
     app.kubernetes.io/name: thanos
-    app.kubernetes.io/version: vmaster-2019-10-18-d55fee2
+    app.kubernetes.io/version: master-2019-10-18-d55fee2
   name: thanos-receive-controller
   namespace: thanos
 spec:
@@ -21,7 +21,7 @@ spec:
         app.kubernetes.io/component: thanos-receive-controller
         app.kubernetes.io/instance: thanos-receive-controller
         app.kubernetes.io/name: thanos
-        app.kubernetes.io/version: vmaster-2019-10-18-d55fee2
+        app.kubernetes.io/version: master-2019-10-18-d55fee2
     spec:
       containers:
       - args:
