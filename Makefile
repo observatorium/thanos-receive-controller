@@ -31,7 +31,7 @@ generate-in-docker:
 	$(CONTAINER_CMD) make $(MFLAGS) generate
 
 .PHONY: ${MANIFESTS}
-${MANIFESTS}: jsonnet/main.jsonnet jsonnet/tenants.libsonnet jsonnet/lib/*
+${MANIFESTS}: jsonnet/main.jsonnet jsonnet/hashrings.jsonnet jsonnet/lib/*
 	@rm -rf ${MANIFESTS}
 	@mkdir -p ${MANIFESTS}
 	jsonnet -J jsonnet/vendor -m ${MANIFESTS} jsonnet/main.jsonnet | xargs -I{} sh -c 'cat {} | gojsontoyaml > {}.yaml && rm -f {}' -- {}

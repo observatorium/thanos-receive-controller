@@ -1,8 +1,13 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
+  labels:
+    app.kubernetes.io/component: thanos-receive-controller
+    app.kubernetes.io/instance: thanos-receive-controller
+    app.kubernetes.io/name: thanos
+    app.kubernetes.io/version: master-2019-10-18-d55fee2
   name: thanos-receive-controller
-  namespace: observatorium
+  namespace: thanos
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -10,4 +15,4 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: thanos-receive-controller
-  namespace: observatorium
+  namespace: thanos

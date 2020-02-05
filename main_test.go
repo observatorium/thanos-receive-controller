@@ -314,7 +314,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 					opts.fileName: string(buf),
 				},
 			}
-			if gcm, err = klient.CoreV1().ConfigMaps(opts.namespace).Create(gcm); err != nil {
+			if _, err = klient.CoreV1().ConfigMaps(opts.namespace).Create(gcm); err != nil {
 				t.Fatalf("got unexpected error creating ConfigMap: %v", err)
 			}
 
