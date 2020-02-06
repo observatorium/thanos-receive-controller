@@ -12,10 +12,10 @@ local k = import 'ksonnet/ksonnet.beta.4/k.libsonnet';
     hashrings: error 'must provide hashring configuration',
 
     commonLabels:: {
-      'app.kubernetes.io/name': 'thanos',
+      'app.kubernetes.io/name': 'thanos-receive-controller',
       'app.kubernetes.io/instance': trc.config.name,
       'app.kubernetes.io/version': trc.config.version,
-      'app.kubernetes.io/component': 'thanos-receive-controller',
+      'app.kubernetes.io/component': 'kubernetes-controller',
     },
 
     podLabelSelector:: {
