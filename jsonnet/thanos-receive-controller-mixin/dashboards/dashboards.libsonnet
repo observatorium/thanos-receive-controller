@@ -8,9 +8,9 @@ local g = import 'thanos-mixin/lib/thanos-grafana-builder/builder.libsonnet';
         g.row('Reconcile Attempts')
         .addPanel(
           g.panel('Rate') +
-          g.qpsErrTotalPanel(
-            'thanos_receive_controller_reconcile_errors_total{namespace="$namespace",%(thanosReceiveControllerSelector)s}' % $._config,
+          g.queryPanel(
             'thanos_receive_controller_reconcile_attempts_total{namespace="$namespace",%(thanosReceiveControllerSelector)s}' % $._config,
+            'rate'
           )
         )
         .addPanel(
@@ -27,9 +27,9 @@ local g = import 'thanos-mixin/lib/thanos-grafana-builder/builder.libsonnet';
         g.row('Configmap Changes')
         .addPanel(
           g.panel('Rate') +
-          g.qpsErrTotalPanel(
-            'thanos_receive_controller_configmap_change_errors_total{namespace="$namespace",%(thanosReceiveControllerSelector)s}' % $._config,
+          g.queryPanel(
             'thanos_receive_controller_configmap_change_attempts_total{namespace="$namespace",%(thanosReceiveControllerSelector)s}' % $._config,
+            'rate',
           )
         )
         .addPanel(
