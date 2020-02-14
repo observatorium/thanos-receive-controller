@@ -14,14 +14,12 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": {
-                  "error": "#E24D42"
-               },
+               "aliasColors": { },
                "bars": false,
                "dashLength": 10,
                "dashes": false,
                "datasource": "$datasource",
-               "fill": 10,
+               "fill": 1,
                "id": 1,
                "legend": {
                   "avg": false,
@@ -33,7 +31,7 @@
                   "values": false
                },
                "lines": true,
-               "linewidth": 0,
+               "linewidth": 1,
                "links": [ ],
                "nullPointMode": "null as zero",
                "percentage": false,
@@ -43,15 +41,15 @@
                "seriesOverrides": [ ],
                "spaceLength": 10,
                "span": 6,
-               "stack": true,
+               "stack": false,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(thanos_receive_controller_reconcile_errors_total{namespace=\"$namespace\",job=~\"thanos-receive-controller.*\"}[$interval])) / sum(rate(thanos_receive_controller_reconcile_attempts_total{namespace=\"$namespace\",job=~\"thanos-receive-controller.*\"}[$interval]))",
+                     "expr": "thanos_receive_controller_reconcile_attempts_total{namespace=\"$namespace\",job=~\"thanos-receive-controller.*\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "error",
-                     "refId": "A",
+                     "legendFormat": "rate",
+                     "legendLink": null,
                      "step": 10
                   }
                ],
@@ -74,7 +72,7 @@
                },
                "yaxes": [
                   {
-                     "format": "percentunit",
+                     "format": "short",
                      "label": null,
                      "logBase": 1,
                      "max": null,
@@ -180,14 +178,12 @@
          "height": "250px",
          "panels": [
             {
-               "aliasColors": {
-                  "error": "#E24D42"
-               },
+               "aliasColors": { },
                "bars": false,
                "dashLength": 10,
                "dashes": false,
                "datasource": "$datasource",
-               "fill": 10,
+               "fill": 1,
                "id": 3,
                "legend": {
                   "avg": false,
@@ -199,7 +195,7 @@
                   "values": false
                },
                "lines": true,
-               "linewidth": 0,
+               "linewidth": 1,
                "links": [ ],
                "nullPointMode": "null as zero",
                "percentage": false,
@@ -209,15 +205,15 @@
                "seriesOverrides": [ ],
                "spaceLength": 10,
                "span": 6,
-               "stack": true,
+               "stack": false,
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum(rate(thanos_receive_controller_configmap_change_errors_total{namespace=\"$namespace\",job=~\"thanos-receive-controller.*\"}[$interval])) / sum(rate(thanos_receive_controller_configmap_change_attempts_total{namespace=\"$namespace\",job=~\"thanos-receive-controller.*\"}[$interval]))",
+                     "expr": "thanos_receive_controller_configmap_change_attempts_total{namespace=\"$namespace\",job=~\"thanos-receive-controller.*\"}",
                      "format": "time_series",
                      "intervalFactor": 2,
-                     "legendFormat": "error",
-                     "refId": "A",
+                     "legendFormat": "rate",
+                     "legendLink": null,
                      "step": 10
                   }
                ],
@@ -240,7 +236,7 @@
                },
                "yaxes": [
                   {
-                     "format": "percentunit",
+                     "format": "short",
                      "label": null,
                      "logBase": 1,
                      "max": null,
