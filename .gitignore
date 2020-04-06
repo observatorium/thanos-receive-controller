@@ -1,4 +1,3 @@
 /thanos-receive-controller
 /.tags
-vendor
 jsonnetfile.lock.json
