@@ -1,23 +1,28 @@
 module github.com/observatorium/thanos-receive-controller
 
-go 1.12
-
-replace github.com/prometheus/prometheus => github.com/prometheus/prometheus v0.0.0-20190710134608-e5b22494857d
+go 1.14
 
 require (
+	github.com/Azure/go-autorest/autorest v0.10.0 // indirect
+	github.com/Azure/go-autorest/autorest/adal v0.8.3 // indirect
+	github.com/brancz/gojsontoyaml v0.0.0-20191212081931-bf2969bbd742
 	github.com/go-kit/kit v0.9.0
-	github.com/google/go-cmp v0.3.1
-	github.com/google/gofuzz v1.0.0 // indirect
-	github.com/googleapis/gnostic v0.3.0 // indirect
-	github.com/imdario/mergo v0.3.7 // indirect
-	github.com/improbable-eng/thanos v0.6.0
+	github.com/golangci/golangci-lint v1.24.0
+	github.com/google/go-cmp v0.4.0
+	github.com/google/go-jsonnet v0.15.1-0.20200415122941-8a0084e64395
+	github.com/jsonnet-bundler/jsonnet-bundler v0.3.1
 	github.com/oklog/run v1.0.0
-	github.com/pkg/errors v0.8.1
-	github.com/prometheus/client_golang v1.0.0
-	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45 // indirect
-	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4 // indirect
-	google.golang.org/appengine v1.5.0 // indirect
-	k8s.io/api v0.0.0-20190409021203-6e4e0e4f393b
-	k8s.io/apimachinery v0.0.0-20190404173353-6a84e37a896d
-	k8s.io/client-go v11.0.1-0.20190409021438-1a26190bd76a+incompatible
+	github.com/pkg/errors v0.9.1
+	github.com/prometheus/client_golang v1.5.0
+	github.com/prometheus/prometheus v1.8.2-0.20200213233353-b90be6f32a33 // master ~ v2.15.2
+	github.com/thanos-io/thanos v0.12.0
+	k8s.io/api v0.0.0-20191115095533-47f6de673b26
+	k8s.io/apimachinery v0.0.0-20191115015347-3c7067801da2
+	k8s.io/client-go v12.0.0+incompatible
+)
+
+replace (
+	// Mitigation for: https://github.com/Azure/go-autorest/issues/414
+	github.com/Azure/go-autorest => github.com/Azure/go-autorest v12.3.0+incompatible
+	k8s.io/client-go => k8s.io/client-go v0.0.0-20190620085101-78d2af792bab
 )

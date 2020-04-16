@@ -2,3 +2,4 @@
 /.tags
 vendor
 jsonnetfile.lock.json
+tmp

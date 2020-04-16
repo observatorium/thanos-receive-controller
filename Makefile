@@ -6,7 +6,14 @@ RULES := ${EXAMPLES}/rules.yaml
 SRC = $(shell find . -type f -name '*.go' -not -path './vendor/*')
 JSONNET_SRC = $(shell find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print)
 
-JSONNET_FMT := jsonnetfmt -n 2 --max-blank-lines 2 --string-style s --comment-style s
+
+BIN_DIR ?= ./tmp/bin
+GOJSONTOYAML ?= $(BIN_DIR)/gojsontoyaml
+GOLANGCILINT ?= $(BIN_DIR)/golangci-lint
+JSONNET ?= $(BIN_DIR)/jsonnet
+JSONNET_FMT ?= $(BIN_DIR)/jsonnetfmt
+JSONNET_BUNDLER ?= $(BIN_DIR)/jb
+PROMTOOL ?= $(BIN_DIR)/promtool
 
 CONTAINER_CMD:=docker run --rm \
 		-u="$(shell id -u):$(shell id -g)" \
@@ -31,41 +38,41 @@ generate-in-docker:
 	$(CONTAINER_CMD) make $(MFLAGS) generate
 
 .PHONY: ${MANIFESTS}
-${MANIFESTS}: jsonnet/main.jsonnet jsonnet/hashrings.jsonnet jsonnet/lib/*
+${MANIFESTS}: jsonnet/main.jsonnet jsonnet/hashrings.jsonnet jsonnet/lib/* $(JSONNET) $(GOJSONTOYAML)
 	@rm -rf ${MANIFESTS}
 	@mkdir -p ${MANIFESTS}
-	jsonnet -J jsonnet/vendor -m ${MANIFESTS} jsonnet/main.jsonnet | xargs -I{} sh -c 'cat {} | gojsontoyaml > {}.yaml && rm -f {}' -- {}
+	$(JSONNET) -J jsonnet/vendor -m ${MANIFESTS} jsonnet/main.jsonnet | xargs -I{} sh -c 'cat {} | $(GOJSONTOYAML) > {}.yaml && rm -f {}' -- {}
 
 .PHONY: ${DASHBOARDS}
-${DASHBOARDS}: jsonnet/thanos-receive-controller-mixin/mixin.libsonnet jsonnet/thanos-receive-controller-mixin/config.libsonnet jsonnet/thanos-receive-controller-mixin/dashboards/*
+${DASHBOARDS}: jsonnet/thanos-receive-controller-mixin/mixin.libsonnet jsonnet/thanos-receive-controller-mixin/config.libsonnet jsonnet/thanos-receive-controller-mixin/dashboards/* $(JSONNET) $(GOJSONTOYAML)
 	@rm -rf ${DASHBOARDS}
 	@mkdir -p ${DASHBOARDS}
-	jsonnet -J jsonnet/vendor -m ${DASHBOARDS} jsonnet/thanos-receive-controller-mixin/dashboards.jsonnet
+	$(JSONNET) -J jsonnet/vendor -m ${DASHBOARDS} jsonnet/thanos-receive-controller-mixin/dashboards.jsonnet
 
-${ALERTS}: jsonnet/thanos-receive-controller-mixin/mixin.libsonnet jsonnet/thanos-receive-controller-mixin/config.libsonnet jsonnet/thanos-receive-controller-mixin/alerts/*
-	jsonnet jsonnet/thanos-receive-controller-mixin/alerts.jsonnet | gojsontoyaml > $@
+${ALERTS}: jsonnet/thanos-receive-controller-mixin/mixin.libsonnet jsonnet/thanos-receive-controller-mixin/config.libsonnet jsonnet/thanos-receive-controller-mixin/alerts/* $(JSONNET) $(GOJSONTOYAML)
+	$(JSONNET) jsonnet/thanos-receive-controller-mixin/alerts.jsonnet | $(GOJSONTOYAML) > $@
 
-${RULES}: jsonnet/thanos-receive-controller-mixin/mixin.libsonnet jsonnet/thanos-receive-controller-mixin/config.libsonnet jsonnet/thanos-receive-controller-mixin/rules/*
-	jsonnet jsonnet/thanos-receive-controller-mixin/rules.jsonnet | gojsontoyaml > $@
+${RULES}: jsonnet/thanos-receive-controller-mixin/mixin.libsonnet jsonnet/thanos-receive-controller-mixin/config.libsonnet jsonnet/thanos-receive-controller-mixin/rules/* $(JSONNET) $(GOJSONTOYAML)
+	$(JSONNET) jsonnet/thanos-receive-controller-mixin/rules.jsonnet | $(GOJSONTOYAML) > $@
 
 .PHONY: go-vendor
 go-vendor: go.mod go.sum
 	go mod vendor
 
 .PHONY: jsonnet-vendor
-jsonnet-vendor: jsonnet/jsonnetfile.json
+jsonnet-vendor: jsonnet/jsonnetfile.json $(JSONNET_BUNDLER)
 	rm -rf jsonnet/vendor
-	cd jsonnet && jb install
+	cd jsonnet && ../$(JSONNET_BUNDLER) install
 
 .PHONY: fmt
-fmt:
+fmt: $(JSONNET_FMT)
 	@fmt_res=$$(gofmt -d -s $$(find . -type f -name '*.go' -not -path './vendor/*' -not -path './jsonnet/vendor/*')); if [ -n "$$fmt_res" ]; then printf '\nGofmt found style issues. Please check the reported issues\nand fix them if necessary before submitting the code for review:\n\n%s' "$$fmt_res"; exit 1; fi
-	@echo ${JSONNET_SRC} | xargs -n 1 -- $(JSONNET_FMT) -i
+	@echo ${JSONNET_SRC} | xargs -n 1 -- $(JSONNET_FMT) -n 2 --max-blank-lines 2 --string-style s --comment-style s -i
 
 .PHONY: lint
-lint: fmt ${ALERTS} ${RULES}
-	golangci-lint run -v --enable-all
-	promtool check rules ${ALERTS} ${RULES}
+lint: fmt ${ALERTS} ${RULES} $(GOLANGCILINT) $(PROMTOOL)
+	$(GOLANGCILINT) run -v --enable-all
+	$(PROMTOOL) check rules ${ALERTS} ${RULES}
 
 .PHONY: test ${ALERTS} ${RULES}
 test:
@@ -78,3 +85,29 @@ clean:
 	rm -rf ${DASHBOARDS}
 	rm -rf ${ALERTS}
 	rm -rf ${RULES}
+
+$(BIN_DIR):
+	mkdir -p $(BIN_DIR)
+
+.PHONY: vendor
+vendor: go.mod go.sum
+	go mod tidy
+	go mod vendor
+
+$(GOJSONTOYAML): vendor $(BIN_DIR)
+	go build -mod=vendor -o $@ github.com/brancz/gojsontoyaml
+
+$(GOLANGCILINT): vendor $(BIN_DIR)
+	go build -mod=vendor -o $@ github.com/golangci/golangci-lint/cmd/golangci-lint
+
+$(JSONNET): vendor $(BIN_DIR)
+	go build -mod=vendor -o $@ github.com/google/go-jsonnet/cmd/jsonnet
+
+$(JSONNET_BUNDLER): vendor $(BIN_DIR)
+	go build -mod=vendor -o $@ github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb
+
+$(JSONNET_FMT): vendor $(BIN_DIR)
+	go build -mod=vendor -o $@ github.com/google/go-jsonnet/cmd/jsonnetfmt
+
+$(PROMTOOL): vendor $(BIN_DIR)
+	go build -mod=vendor -o $@ github.com/prometheus/prometheus/cmd/promtool
