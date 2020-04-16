@@ -24,7 +24,7 @@ steps:
 
 - name: build
   pull: always
-  image: golang:1.12
+  image: golang:1.14.2
   commands:
   - make thanos-receive-controller
 
@@ -36,7 +36,7 @@ steps:
   - git diff --exit-code
 
 - name: tags
-  image: golang:1.12
+  image: golang:1.14.2
   commands:
   - echo -n "$(git rev-parse --abbrev-ref HEAD | tr / -)-$(date +%Y-%m-%d)-$(git rev-parse --short HEAD),latest" > .tags
   when:
