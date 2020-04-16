@@ -84,9 +84,10 @@ func main() {
 	logger = log.WithPrefix(logger, "caller", log.DefaultCaller)
 
 	parts := strings.Split(config.StatefulSetLabel, "=")
-	if len(parts) != 2 {
+	if len(parts) != 2 { //nolint,gonmd
 		stdlog.Fatal("--statefulset-label must be of the form 'key=value'")
 	}
+
 	labelKey, labelValue := parts[0], parts[1]
 
 	konfig, err := clientcmd.BuildConfigFromFlags("", config.KubeConfig)
@@ -170,6 +171,7 @@ func main() {
 	}
 
 	level.Info(logger).Log("msg", "starting the controller")
+
 	if err := g.Run(); err != nil {
 		stdlog.Fatal(err)
 	}
@@ -241,6 +243,7 @@ func newReflectorMetrics(reg *prometheus.Registry) prometheusReflectorMetrics {
 			},
 		),
 	}
+
 	if reg != nil {
 		reg.MustRegister(
 			m.listDurationMetric,
@@ -252,6 +255,7 @@ func newReflectorMetrics(reg *prometheus.Registry) prometheusReflectorMetrics {
 			m.lastResourceVersionMetric,
 		)
 	}
+
 	return m
 }
 
@@ -409,9 +413,11 @@ func (c *controller) run(stop <-chan struct{}) error {
 
 	go c.cmapInf.Run(stop)
 	go c.ssetInf.Run(stop)
+
 	if err := c.waitForCacheSync(stop); err != nil {
 		return err
 	}
+
 	c.cmapInf.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(_ interface{}) { c.queue.add() },
 		DeleteFunc: func(_ interface{}) { c.queue.add() },
@@ -422,9 +428,11 @@ func (c *controller) run(stop <-chan struct{}) error {
 		DeleteFunc: func(_ interface{}) { c.queue.add() },
 		UpdateFunc: func(_, _ interface{}) { c.queue.add() },
 	})
+
 	go c.worker()
 
 	<-stop
+
 	return nil
 }
 
@@ -438,18 +446,23 @@ func (c *controller) waitForCacheSync(stop <-chan struct{}) error {
 		{"ConfigMap", c.cmapInf},
 		{"StatefulSet", c.ssetInf},
 	}
+
 	for _, inf := range informers {
 		if !cache.WaitForCacheSync(stop, inf.informer.HasSynced) {
 			level.Error(c.logger).Log("msg", fmt.Sprintf("failed to sync %s cache", inf.name))
+
 			ok = false
 		} else {
 			level.Debug(c.logger).Log("msg", fmt.Sprintf("successfully synced %s cache", inf.name))
 		}
 	}
+
 	if !ok {
 		return errors.New("failed to sync caches")
 	}
+
 	level.Info(c.logger).Log("msg", "successfully synced all caches")
+
 	return nil
 }
 
@@ -462,31 +475,39 @@ func (c *controller) worker() {
 func (c *controller) sync() {
 	c.reconcileAttempts.Inc()
 	configMap, ok, err := c.cmapInf.GetStore().GetByKey(fmt.Sprintf("%s/%s", c.options.namespace, c.options.configMapName))
+
 	if !ok || err != nil {
 		c.reconcileErrors.WithLabelValues(fetch).Inc()
 		level.Warn(c.logger).Log("msg", "could not fetch ConfigMap", "err", err, "name", c.options.configMapName)
+
 		return
 	}
+
 	cm := configMap.(*corev1.ConfigMap)
 
 	var hashrings []receive.HashringConfig
 	if err := json.Unmarshal([]byte(cm.Data[c.options.fileName]), &hashrings); err != nil {
 		c.reconcileErrors.WithLabelValues(decode).Inc()
 		level.Warn(c.logger).Log("msg", "failed to decode configuration", "err", err)
+
 		return
 	}
 
 	statefulsets := make(map[string]*appsv1.StatefulSet)
+
 	for _, obj := range c.ssetInf.GetStore().List() {
 		sts := obj.(*appsv1.StatefulSet)
 		hashring, ok := sts.Labels[hashringLabelKey]
+
 		if !ok {
 			continue
 		}
+
 		statefulsets[hashring] = sts.DeepCopy()
 	}
 
 	c.populate(hashrings, statefulsets)
+
 	if err := c.saveHashring(hashrings); err != nil {
 		c.reconcileErrors.WithLabelValues(save).Inc()
 		level.Error(c.logger).Log("msg", "failed to save hashrings")
@@ -509,6 +530,7 @@ func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets m
 					),
 				)
 			}
+
 			hashrings[i].Endpoints = endpoints
 			c.hashringNodes.WithLabelValues(h.Hashring).Set(float64(len(endpoints)))
 			c.hashringTenants.WithLabelValues(h.Hashring).Set(float64(len(h.Tenants)))
@@ -536,15 +558,19 @@ func (c *controller) saveHashring(hashring []receive.HashringConfig) error {
 	c.configmapHash.Set(hashAsMetricValue(buf))
 	c.configmapChangeAttempts.Inc()
 	gcm, err := c.klient.CoreV1().ConfigMaps(c.options.namespace).Get(c.options.configMapGeneratedName, metav1.GetOptions{})
+
 	if kerrors.IsNotFound(err) {
 		_, err = c.klient.CoreV1().ConfigMaps(c.options.namespace).Create(cm)
 		if err != nil {
 			c.configmapChangeErrors.WithLabelValues(create).Inc()
 			return err
 		}
+
 		c.configmapLastSuccessfulChangeTime.Set(float64(time.Now().Unix()))
+
 		return nil
 	}
+
 	if err != nil {
 		c.configmapChangeErrors.WithLabelValues(other).Inc()
 		return err
@@ -561,6 +587,7 @@ func (c *controller) saveHashring(hashring []receive.HashringConfig) error {
 	}
 
 	c.configmapLastSuccessfulChangeTime.Set(float64(time.Now().Unix()))
+
 	return nil
 }
 
@@ -569,8 +596,11 @@ func hashAsMetricValue(data []byte) float64 {
 	sum := md5.Sum(data) //nolint:gosec
 	// We only want 48 bits as a float64 only has a 53 bit mantissa.
 	smallSum := sum[0:6]
+
 	var bytes = make([]byte, 8)
+
 	copy(bytes, smallSum)
+
 	return float64(binary.LittleEndian.Uint64(bytes))
 }
 
@@ -590,6 +620,7 @@ func newQueue() *queue {
 func (q *queue) add() {
 	q.Lock()
 	defer q.Unlock()
+
 	if !q.ok {
 		return
 	}
@@ -602,9 +633,11 @@ func (q *queue) add() {
 func (q *queue) stop() {
 	q.Lock()
 	defer q.Unlock()
+
 	if !q.ok {
 		return
 	}
+
 	close(q.ch)
 	q.ok = false
 }
@@ -613,5 +646,6 @@ func (q *queue) get() bool {
 	<-q.ch
 	q.Lock()
 	defer q.Unlock()
+
 	return q.ok
 }
