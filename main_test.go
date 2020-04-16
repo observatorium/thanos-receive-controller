@@ -14,11 +14,15 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
+const reconciliationDelay = 500 * time.Millisecond
+
 func intPointer(i int32) *int32 {
 	return &i
 }
 
 func TestController(t *testing.T) {
+	port := 10901
+
 	for _, tt := range []struct {
 		name         string
 		hashrings    []receive.HashringConfig
@@ -49,7 +53,7 @@ func TestController(t *testing.T) {
 						Labels: map[string]string{"a": "b"},
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas:    intPointer(3),
+						Replicas:    intPointer(3), //nolint,gonmd
 						ServiceName: "h0",
 					},
 				},
@@ -75,7 +79,7 @@ func TestController(t *testing.T) {
 						},
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas:    intPointer(3),
+						Replicas:    intPointer(3), //nolint,gonmd
 						ServiceName: "h0",
 					},
 				},
@@ -106,7 +110,7 @@ func TestController(t *testing.T) {
 						},
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas:    intPointer(3),
+						Replicas:    intPointer(3), //nolint,gonmd
 						ServiceName: "h0",
 					},
 				},
@@ -119,7 +123,7 @@ func TestController(t *testing.T) {
 						},
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas:    intPointer(123),
+						Replicas:    intPointer(123), //nolint,gonmd
 						ServiceName: "h123",
 					},
 				},
@@ -152,7 +156,7 @@ func TestController(t *testing.T) {
 						},
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas:    intPointer(3),
+						Replicas:    intPointer(3), //nolint,gonmd
 						ServiceName: "h0",
 					},
 				},
@@ -165,7 +169,7 @@ func TestController(t *testing.T) {
 						},
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas:    intPointer(2),
+						Replicas:    intPointer(2), //nolint,gonmd
 						ServiceName: "h1",
 					},
 				},
@@ -191,6 +195,7 @@ func TestController(t *testing.T) {
 		hashrings := tt.hashrings
 		statefulsets := tt.statefulsets
 		expected := tt.expected
+
 		t.Run(name, func(t *testing.T) {
 			opts := &options{
 				labelKey:               "a",
@@ -200,7 +205,7 @@ func TestController(t *testing.T) {
 				configMapName:          "original",
 				configMapGeneratedName: "generated",
 				namespace:              "namespace",
-				port:                   10901,
+				port:                   port,
 				scheme:                 "http",
 			}
 			klient := fake.NewSimpleClientset()
@@ -210,7 +215,7 @@ func TestController(t *testing.T) {
 			_ = createInitialResources(t, klient, opts, hashrings, statefulsets)
 
 			// Reconciliation is async, so we need to wait a bit.
-			<-time.After(500 * time.Millisecond)
+			<-time.After(reconciliationDelay)
 			cm, err := klient.CoreV1().ConfigMaps(opts.namespace).Get(opts.configMapGeneratedName, metav1.GetOptions{})
 			if err != nil {
 				t.Fatalf("got unexpected error getting ConfigMap: %v", err)
@@ -229,6 +234,7 @@ func TestController(t *testing.T) {
 }
 
 func TestControllerConfigmapUpdate(t *testing.T) {
+	port := 10901
 	originalHashrings := []receive.HashringConfig{{
 		Hashring: "hashring0",
 		Tenants:  []string{"foo", "bar"},
@@ -268,6 +274,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 		hashrings := tt.hashrings
 		labels := tt.labels
 		shouldBeUpdated := tt.shouldBeUpdated
+
 		t.Run(name, func(t *testing.T) {
 			opts := &options{
 				labelKey:               "a",
@@ -277,7 +284,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 				configMapName:          "original",
 				configMapGeneratedName: "generated",
 				namespace:              "namespace",
-				port:                   10901,
+				port:                   port,
 				scheme:                 "http",
 			}
 			klient := fake.NewSimpleClientset()
@@ -294,7 +301,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 							},
 						},
 						Spec: appsv1.StatefulSetSpec{
-							Replicas:    intPointer(3),
+							Replicas:    intPointer(3), //nolint,gonmd
 							ServiceName: "h0",
 						},
 					},
@@ -322,7 +329,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 			defer cleanUp()
 
 			// Reconciliation is async, so we need to wait a bit.
-			<-time.After(500 * time.Millisecond)
+			<-time.After(reconciliationDelay)
 			gcm, err = klient.CoreV1().ConfigMaps(opts.namespace).Get(opts.configMapGeneratedName, metav1.GetOptions{})
 			if err != nil {
 				t.Fatalf("got unexpected error getting ConfigMap: %v", err)

@@ -1,17 +1,7 @@
 {
+  "version": 1,
   "dependencies": [
     {
-      "name": "grafana-builder",
-      "source": {
-        "git": {
-          "remote": "https://github.com/grafana/jsonnet-libs",
-          "subdir": "grafana-builder"
-        }
-      },
-      "version": "master"
-    },
-    {
-      "name": "grafonnet",
       "source": {
         "git": {
           "remote": "https://github.com/grafana/grafonnet-lib",
@@ -21,27 +11,35 @@
       "version": "master"
     },
     {
-      "name": "ksonnet",
+      "source": {
+        "git": {
+          "remote": "https://github.com/grafana/jsonnet-libs",
+          "subdir": "grafana-builder"
+        }
+      },
+      "version": "master"
+    },
+    {
       "source": {
         "git": {
           "remote": "https://github.com/ksonnet/ksonnet-lib",
           "subdir": ""
         }
       },
-      "version": "0d2f82676817bbf9e4acf6495b2090205f323b9f"
+      "version": "0d2f82676817bbf9e4acf6495b2090205f323b9f",
+      "name": "ksonnet"
     },
     {
-      "name": "thanos-mixin",
       "source": {
         "git": {
           "remote": "https://github.com/thanos-io/thanos",
           "subdir": "mixin/thanos"
         }
       },
-      "version": "master"
+      "version": "master",
+      "name": "thanos-mixin"
     },
     {
-      "name": "thanos-receive-controller-mixin",
       "source": {
         "local": {
           "directory": "thanos-receive-controller-mixin"
@@ -49,5 +47,6 @@
       },
       "version": "."
     }
-  ]
+  ],
+  "legacyImports": true
 }
