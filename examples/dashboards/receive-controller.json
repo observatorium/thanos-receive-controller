@@ -963,7 +963,7 @@
          "30d"
       ]
    },
-   "timezone": "",
+   "timezone": "UTC",
    "title": "Thanos / Receive Controller",
    "uid": "858503cdeb29690fd8946e038f01ba85",
    "version": 0
