@@ -164,4 +164,21 @@ local k = import 'ksonnet/ksonnet.beta.4/k.libsonnet';
       },
     },
   },
+
+  withNodeSelector:: {
+    local trc = self,
+    config+:: {
+      nodeSelector: error 'must provide nodeSelector',
+    },
+
+    deployment+: {
+      spec+: {
+        template+: {
+          spec+: {
+            nodeSelector: std.mapWithKey(function(k, v) v, trc.config.nodeSelector),
+          },
+        },
+      },
+    },
+  },
 }
