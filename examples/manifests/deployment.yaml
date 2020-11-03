@@ -39,4 +39,5 @@ spec:
         ports:
         - containerPort: 8080
           name: http
+        resources: {}
       serviceAccount: thanos-receive-controller
