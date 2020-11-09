@@ -11,8 +11,7 @@ groups:
       severity: critical
   - alert: ThanosReceiveControllerReconcileErrorRate
     annotations:
-      message: Thanos Receive Controller failing to reconcile changes, {{ $value |
-        humanize }}% of attempts failed.
+      message: Thanos Receive Controller failing to reconcile changes, {{ $value | humanize }}% of attempts failed.
     expr: |
       sum(
         rate(thanos_receive_controller_reconcile_errors_total{job=~"thanos-receive-controller.*"}[5m])
@@ -25,8 +24,7 @@ groups:
       severity: warning
   - alert: ThanosReceiveControllerConfigmapChangeErrorRate
     annotations:
-      message: Thanos Receive Controller failing to refresh configmap, {{ $value |
-        humanize }}% of attempts failed.
+      message: Thanos Receive Controller failing to refresh configmap, {{ $value | humanize }}% of attempts failed.
     expr: |
       sum(
         rate(thanos_receive_controller_configmap_change_errors_total{job=~"thanos-receive-controller.*"}[5m])
@@ -39,8 +37,7 @@ groups:
       severity: warning
   - alert: ThanosReceiveConfigInconsistent
     annotations:
-      message: The configuration of the instances of Thanos Receive `{{$labels.job}}`
-        are out of sync.
+      message: The configuration of the instances of Thanos Receive `{{$labels.job}}` are out of sync.
     expr: |
       avg(thanos_receive_config_hash{job=~"thanos-receive.*"}) BY (namespace, job)
         /
