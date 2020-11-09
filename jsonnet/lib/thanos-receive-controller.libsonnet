@@ -1,28 +1,42 @@
-{
+// These are the defaults for this components configuration.
+// When calling the function to generate the component's manifest,
+// you can pass an object structured like the default to overwrite default values.
+local defaults = {
+  local defaults = self,
+  name: error 'must provide name',
+  namespace: error 'must provide namespace',
+  version: error 'must provide version',
+  image: error 'must provide image',
+  replicas: error 'must provide replicas',
+  hashrings: error 'must provide hashring configuration',
+  resources: {},
+  serviceMonitor: false,
+  ports: { http: 8080 },
+
+  commonLabels:: {
+    'app.kubernetes.io/name': 'thanos-receive-controller',
+    'app.kubernetes.io/instance': defaults.name,
+    'app.kubernetes.io/version': defaults.version,
+    'app.kubernetes.io/component': 'kubernetes-controller',
+  },
+
+  podLabelSelector:: {
+    [labelName]: defaults.commonLabels[labelName]
+    for labelName in std.objectFields(defaults.commonLabels)
+    if !std.setMember(labelName, ['app.kubernetes.io/version'])
+  },
+};
+
+function(params) {
   local trc = self,
 
-  config:: {
-    name: error 'must provide name',
-    namespace: error 'must provide namespace',
-    version: error 'must provide version',
-    image: error 'must provide image',
-    replicas: error 'must provide replicas',
-    hashrings: error 'must provide hashring configuration',
-    resources: {},
-
-    commonLabels:: {
-      'app.kubernetes.io/name': 'thanos-receive-controller',
-      'app.kubernetes.io/instance': trc.config.name,
-      'app.kubernetes.io/version': trc.config.version,
-      'app.kubernetes.io/component': 'kubernetes-controller',
-    },
-
-    podLabelSelector:: {
-      [labelName]: trc.config.commonLabels[labelName]
-      for labelName in std.objectFields(trc.config.commonLabels)
-      if !std.setMember(labelName, ['app.kubernetes.io/version'])
-    },
-  },
+  // Combine the defaults and the passed params to make the component's config.
+  config:: defaults + params,
+  // Safety checks for combined config of defaults and params
+  assert std.isNumber(trc.config.replicas) && trc.config.replicas >= 0 : 'thanos receive controller replicas has to be number >= 0',
+  assert std.isObject(trc.config.resources),
+  assert std.isBoolean(trc.config.serviceMonitor),
+  assert std.isArray(trc.config.hashrings),
 
   serviceAccount: {
     apiVersion: 'v1',
@@ -78,17 +92,16 @@
     }],
   },
 
-  configmap:
-    {
-      apiVersion: 'v1',
-      kind: 'ConfigMap',
-      metadata: {
-        name: trc.config.name + '-tenants',
-        namespace: trc.config.namespace,
-        labels: trc.config.commonLabels,
-      },
-      data: { 'hashrings.json': std.manifestJsonEx(trc.config.hashrings, '  ') },
+  configmap: {
+    apiVersion: 'v1',
+    kind: 'ConfigMap',
+    metadata: {
+      name: trc.config.name + '-tenants',
+      namespace: trc.config.namespace,
+      labels: trc.config.commonLabels,
     },
+    data: { 'hashrings.json': std.manifestJsonEx(trc.config.hashrings, '  ') },
+  },
 
   service: {
     apiVersion: 'v1',
@@ -100,7 +113,15 @@
     },
     spec: {
       ports: [
-        { name: 'http', targetPort: 8080, port: 8080 },
+        {
+          assert std.isString(name),
+          assert std.isNumber(trc.config.ports[name]),
+
+          name: name,
+          port: trc.config.ports[name],
+          targetPort: trc.config.ports[name],
+        }
+        for name in std.objectFields(trc.config.ports)
       ],
       selector: trc.config.podLabelSelector,
     },
@@ -116,15 +137,14 @@
         '--file-name=hashrings.json',
         '--namespace=$(NAMESPACE)',
       ],
-      env: [{
-        name: 'NAMESPACE',
-        valueFrom: { fieldRef: { fieldPath: 'metadata.namespace' } },
-      }],
+      env: [
+        { name: 'NAMESPACE', valueFrom: { fieldRef: { fieldPath: 'metadata.namespace' } } },
+      ],
       ports: [
         { name: port.name, containerPort: port.port }
         for port in trc.service.spec.ports
       ],
-      resources: trc.config.resources,
+      resources: if trc.config.resources != {} then trc.config.resources else {},
     };
 
     {
@@ -150,45 +170,21 @@
       },
     },
 
-  withServiceMonitor:: {
-    local trc = self,
-    serviceMonitor: {
-      apiVersion: 'monitoring.coreos.com/v1',
-      kind: 'ServiceMonitor',
-      metadata+: {
-        name: trc.config.name,
-        namespace: trc.config.namespace,
-      },
-      spec: {
-        selector: {
-          matchLabels: trc.config.commonLabels,
-        },
-        endpoints: [
-          { port: 'http' },
-        ],
-      },
-    },
-  },
 
-  withResources:: {
-    local trc = self,
-    config+:: {
-      resources: error 'must provide resources',
+  serviceMonitor: if trc.config.serviceMonitor == true then {
+    apiVersion: 'monitoring.coreos.com/v1',
+    kind: 'ServiceMonitor',
+    metadata+: {
+      name: trc.config.name,
+      namespace: trc.config.namespace,
     },
-
-    deployment+: {
-      spec+: {
-        template+: {
-          spec+: {
-            containers: [
-              if c.name == 'thanos-receive-controller' then c {
-                resources: trc.config.resources,
-              } else c
-              for c in super.containers
-            ],
-          },
-        },
+    spec: {
+      selector: {
+        matchLabels: trc.config.commonLabels,
       },
+      endpoints: [
+        { port: 'http' },
+      ],
     },
   },
 }
