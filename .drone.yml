@@ -9,16 +9,14 @@ platform:
 steps:
 - name: test
   pull: always
-  image: quay.io/coreos/jsonnet-ci:latest
+  image: golang:1.14.2
   commands:
-  # This step requires >=go1.12 and promtool
   - make test
 
 - name: lint
   pull: always
-  image: quay.io/coreos/jsonnet-ci:latest
+  image: golang:1.14.2
   commands:
-  # This step requires golancilint, promtool and jsonnetfmt
   - make lint
   - git diff --exit-code
 
