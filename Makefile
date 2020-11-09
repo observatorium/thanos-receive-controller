@@ -6,7 +6,6 @@ RULES := ${EXAMPLES}/rules.yaml
 SRC = $(shell find . -type f -name '*.go' -not -path './vendor/*')
 JSONNET_SRC = $(shell find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print)
 
-
 BIN_DIR ?= ./tmp/bin
 GOJSONTOYAML ?= $(BIN_DIR)/gojsontoyaml
 GOLANGCILINT ?= $(BIN_DIR)/golangci-lint
@@ -15,15 +14,6 @@ JSONNET_FMT ?= $(BIN_DIR)/jsonnetfmt
 JSONNET_BUNDLER ?= $(BIN_DIR)/jb
 PROMTOOL ?= $(BIN_DIR)/promtool
 
-CONTAINER_CMD:=docker run --rm \
-		-u="$(shell id -u):$(shell id -g)" \
-		-v "$(shell go env GOCACHE):/.cache/go-build" \
-		-v "$(PWD):/go/src/github.com/observatorium/thanos-receive-controller:Z" \
-		-w "/go/src/github.com/observatorium/thanos-receive-controller" \
-		-e USER=deadbeef \
-		-e GO111MODULE=on \
-		quay.io/coreos/jsonnet-ci
-
 all: generate fmt thanos-receive-controller
 
 thanos-receive-controller: go-vendor main.go
@@ -31,11 +21,6 @@ thanos-receive-controller: go-vendor main.go
 
 .PHONY: generate
 generate: jsonnet-vendor ${ALERTS} ${RULES} ${DASHBOARDS} ${MANIFESTS}
-
-.PHONY: generate-in-docker
-generate-in-docker:
-	@echo ">> Compiling assets and generating Kubernetes manifests"
-	$(CONTAINER_CMD) make $(MFLAGS) generate
 
 .PHONY: ${MANIFESTS}
 ${MANIFESTS}: jsonnet/main.jsonnet jsonnet/hashrings.jsonnet jsonnet/lib/* $(JSONNET) $(GOJSONTOYAML)
@@ -57,6 +42,7 @@ ${RULES}: jsonnet/thanos-receive-controller-mixin/mixin.libsonnet jsonnet/thanos
 
 .PHONY: go-vendor
 go-vendor: go.mod go.sum
+	go mod tidy
 	go mod vendor
 
 .PHONY: jsonnet-vendor
@@ -64,20 +50,33 @@ jsonnet-vendor: jsonnet/jsonnetfile.json $(JSONNET_BUNDLER)
 	rm -rf jsonnet/vendor
 	cd jsonnet && ../$(JSONNET_BUNDLER) install
 
+.PHONY: vendor
+vendor: go-vendor jsonnet-vendor
+
 .PHONY: fmt
-fmt: $(JSONNET_FMT)
+fmt: jsonnet-fmt
 	@fmt_res=$$(gofmt -d -s $$(find . -type f -name '*.go' -not -path './vendor/*' -not -path './jsonnet/vendor/*')); if [ -n "$$fmt_res" ]; then printf '\nGofmt found style issues. Please check the reported issues\nand fix them if necessary before submitting the code for review:\n\n%s' "$$fmt_res"; exit 1; fi
+
+
+.PHONY: jsonnet-fmt
+jsonnet-fmt: $(JSONNET_FMT)
 	@echo ${JSONNET_SRC} | xargs -n 1 -- $(JSONNET_FMT) -n 2 --max-blank-lines 2 --string-style s --comment-style s -i
 
 .PHONY: lint
-lint: fmt ${ALERTS} ${RULES} $(GOLANGCILINT) $(PROMTOOL)
+lint: fmt prom-lint $(GOLANGCILINT)
 	$(GOLANGCILINT) run -v --enable-all
+
+.PHONY: prom-lint
+prom-lint: ${ALERTS} ${RULES}  $(PROMTOOL)
 	$(PROMTOOL) check rules ${ALERTS} ${RULES}
 
-.PHONY: test ${ALERTS} ${RULES}
-test:
+.PHONY: test
+test: prom-test
 	CGO_ENABLED=1 GO111MODULE=on GOPROXY=https://proxy.golang.org go test -v -race ./...
-	promtool test rules tests.yaml
+
+.PHONY: prom-test
+prom-test: ${ALERTS} ${RULES}
+	$(PROMTOOL) test rules tests.yaml
 
 .PHONY: clean
 clean:
@@ -89,22 +88,17 @@ clean:
 $(BIN_DIR):
 	mkdir -p $(BIN_DIR)
 
-.PHONY: vendor
-vendor: go.mod go.sum
-	go mod tidy
-	go mod vendor
-
 $(GOJSONTOYAML): vendor $(BIN_DIR)
 	go build -mod=vendor -o $@ github.com/brancz/gojsontoyaml
 
 $(GOLANGCILINT): vendor $(BIN_DIR)
 	go build -mod=vendor -o $@ github.com/golangci/golangci-lint/cmd/golangci-lint
 
-$(JSONNET): vendor $(BIN_DIR)
-	go build -mod=vendor -o $@ github.com/google/go-jsonnet/cmd/jsonnet
-
 $(JSONNET_BUNDLER): vendor $(BIN_DIR)
 	go build -mod=vendor -o $@ github.com/jsonnet-bundler/jsonnet-bundler/cmd/jb
+
+$(JSONNET): vendor $(BIN_DIR)
+	go build -mod=vendor -o $@ github.com/google/go-jsonnet/cmd/jsonnet
 
 $(JSONNET_FMT): vendor $(BIN_DIR)
 	go build -mod=vendor -o $@ github.com/google/go-jsonnet/cmd/jsonnetfmt
