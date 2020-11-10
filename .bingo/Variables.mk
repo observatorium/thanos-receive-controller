@@ -46,6 +46,12 @@ $(JSONNETFMT): .bingo/jsonnetfmt.mod
 	@echo "(re)installing $(GOBIN)/jsonnetfmt-v0.16.0"
 	@cd .bingo && $(GO) build -mod=mod -modfile=jsonnetfmt.mod -o=$(GOBIN)/jsonnetfmt-v0.16.0 "github.com/google/go-jsonnet/cmd/jsonnetfmt"
 
+KUBEVAL := $(GOBIN)/kubeval-v0.0.0-20201005082916-38668c6c5b23
+$(KUBEVAL): .bingo/kubeval.mod
+	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
+	@echo "(re)installing $(GOBIN)/kubeval-v0.0.0-20201005082916-38668c6c5b23"
+	@cd .bingo && $(GO) build -mod=mod -modfile=kubeval.mod -o=$(GOBIN)/kubeval-v0.0.0-20201005082916-38668c6c5b23 "github.com/instrumenta/kubeval"
+
 PROMTOOL := $(GOBIN)/promtool-v1.8.2-0.20200213233353-b90be6f32a33
 $(PROMTOOL): .bingo/promtool.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
