@@ -57,7 +57,7 @@ spec:
         - --configmap-name=thanos-receive
         - --configmap-generated-name=thanos-receive-generated
         - --file-name=hashrings.json
-        image: quat.io/observatorium/thanos-receive-controller
+        image: quay.io/observatorium/thanos-receive-controller
         name: thanos-receive-controller
 ```
 
