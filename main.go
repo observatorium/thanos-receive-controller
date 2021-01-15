@@ -492,10 +492,13 @@ func (c *controller) sync() {
 		return
 	}
 
+	var owner []metav1.OwnerReference
+
 	statefulsets := make(map[string]*appsv1.StatefulSet)
 
 	for _, obj := range c.ssetInf.GetStore().List() {
 		sts := obj.(*appsv1.StatefulSet)
+		owner = sts.OwnerReferences
 		hashring, ok := sts.Labels[hashringLabelKey]
 
 		if !ok {
@@ -507,7 +510,7 @@ func (c *controller) sync() {
 
 	c.populate(hashrings, statefulsets)
 
-	if err := c.saveHashring(hashrings); err != nil {
+	if err := c.saveHashring(hashrings, owner); err != nil {
 		c.reconcileErrors.WithLabelValues(save).Inc()
 		level.Error(c.logger).Log("msg", "failed to save hashrings")
 	}
@@ -537,7 +540,7 @@ func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets m
 	}
 }
 
-func (c *controller) saveHashring(hashring []receive.HashringConfig) error {
+func (c *controller) saveHashring(hashring []receive.HashringConfig, owner []metav1.OwnerReference) error {
 	buf, err := json.Marshal(hashring)
 	if err != nil {
 		return err
@@ -545,8 +548,9 @@ func (c *controller) saveHashring(hashring []receive.HashringConfig) error {
 
 	cm := &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      c.options.configMapGeneratedName,
-			Namespace: c.options.namespace,
+			Name:            c.options.configMapGeneratedName,
+			Namespace:       c.options.namespace,
+			OwnerReferences: owner,
 		},
 		Data: map[string]string{
 			c.options.fileName: string(buf),
