@@ -27,3 +27,10 @@ rules:
   - list
   - watch
   - get
+- apiGroups:
+  - apps
+  resources:
+  - deployments
+  verbs:
+  - list
+  - get

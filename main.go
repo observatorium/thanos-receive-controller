@@ -423,9 +423,11 @@ func getControllerDeployment(logger log.Logger, client kubernetes.Interface,
 		level.Warn(logger).Log("msg", "failed to get deployment by", "label", deploymentLabel, "err", err)
 		return nil
 	}
+
 	for _, deploy := range deployList.Items {
 		return &deploy
 	}
+
 	return nil
 }
 
@@ -575,8 +577,10 @@ func (c *controller) saveHashring(hashring []receive.HashringConfig) error {
 		},
 		BinaryData: nil,
 	}
+
 	if c.controllerDeployment != nil {
 		isControlled := true
+
 		cm.SetOwnerReferences([]metav1.OwnerReference{
 			{
 				APIVersion: "apps/v1",
