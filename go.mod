@@ -16,3 +16,5 @@ require (
 	k8s.io/apimachinery v0.0.0-20191115015347-3c7067801da2
 	k8s.io/client-go v12.0.0+incompatible
 )
+
+replace k8s.io/client-go => k8s.io/client-go v0.0.0-20190620085101-78d2af792bab
