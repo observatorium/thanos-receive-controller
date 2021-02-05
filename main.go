@@ -543,6 +543,7 @@ func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets m
 		}
 	}
 }
+
 func (c *controller) saveHashring(hashring []receive.HashringConfig) error {
 	buf, err := json.Marshal(hashring)
 	if err != nil {
