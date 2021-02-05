@@ -523,6 +523,7 @@ func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets m
 				if len(c.options.clusterDomain) != 0 {
 					clusterDomain = fmt.Sprintf(".%s", c.options.clusterDomain)
 				}
+
 				endpoints = append(endpoints,
 					fmt.Sprintf("%s-%d.%s.%s.svc%s:%d",
 						sts.Name,
