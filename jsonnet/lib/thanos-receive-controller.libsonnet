@@ -68,11 +68,6 @@ function(params) {
         resources: ['statefulsets'],
         verbs: ['list', 'watch', 'get'],
       },
-      {
-        apiGroups: ['apps'],
-        resources: ['deployments'],
-        verbs: ['list', 'get'],
-      },
     ],
   },
 

@@ -57,7 +57,6 @@ func main() {
 		KubeConfig             string
 		Namespace              string
 		StatefulSetLabel       string
-		DeploymentLabel        string
 		ClusterDomain          string
 		ConfigMapName          string
 		ConfigMapGeneratedName string
@@ -70,7 +69,6 @@ func main() {
 	flag.StringVar(&config.KubeConfig, "kubeconfig", "", "Path to kubeconfig")
 	flag.StringVar(&config.Namespace, "namespace", "default", "The namespace to watch")
 	flag.StringVar(&config.StatefulSetLabel, "statefulset-label", "controller.receive.thanos.io=thanos-receive-controller", "The label StatefulSets must have to be watched by the controller")
-	flag.StringVar(&config.DeploymentLabel, "deployment-label", "app.kubernetes.io/name=thanos-receive-controller", "The label of the controller deployment")
 	flag.StringVar(&config.ClusterDomain, "cluster-domain", "cluster.local", "The DNS domain of the cluster")
 	flag.StringVar(&config.ConfigMapName, "configmap-name", "", "The name of the original ConfigMap containing the hashring tenant configuration")
 	flag.StringVar(&config.ConfigMapGeneratedName, "configmap-generated-name", "", "The name of the generated and populated ConfigMap")
@@ -133,7 +131,6 @@ func main() {
 			scheme:                 config.Scheme,
 			labelKey:               labelKey,
 			labelValue:             labelValue,
-			deploymentLabel:        config.DeploymentLabel,
 		}
 		c := newController(klient, logger, opt)
 		c.registerMetrics(reg)
@@ -303,7 +300,6 @@ type options struct {
 	scheme                 string
 	labelKey               string
 	labelValue             string
-	deploymentLabel        string
 }
 
 type controller struct {
@@ -314,8 +310,6 @@ type controller struct {
 	klient  kubernetes.Interface
 	cmapInf cache.SharedIndexInformer
 	ssetInf cache.SharedIndexInformer
-
-	controllerDeployment *appsv1.Deployment
 
 	reconcileAttempts                 prometheus.Counter
 	reconcileErrors                   *prometheus.CounterVec
@@ -342,7 +336,6 @@ func newController(klient kubernetes.Interface, logger log.Logger, o *options) *
 		ssetInf: appsinformers.NewFilteredStatefulSetInformer(klient, o.namespace, resyncPeriod, nil, func(lo *metav1.ListOptions) {
 			lo.LabelSelector = labels.Set{o.labelKey: o.labelValue}.String()
 		}),
-		controllerDeployment: getControllerDeployment(logger, klient, o.namespace, o.deploymentLabel),
 
 		reconcileAttempts: prometheus.NewCounter(prometheus.CounterOpts{
 			Name: "thanos_receive_controller_reconcile_attempts_total",
@@ -412,23 +405,6 @@ func (c *controller) registerMetrics(reg *prometheus.Registry) {
 			c.hashringTenants,
 		)
 	}
-}
-
-func getControllerDeployment(logger log.Logger, client kubernetes.Interface,
-	namespace, deploymentLabel string) *appsv1.Deployment {
-	deployList, err := client.AppsV1().Deployments(namespace).List(metav1.ListOptions{
-		LabelSelector: deploymentLabel,
-	})
-	if err != nil {
-		level.Warn(logger).Log("msg", "failed to get deployment by", "label", deploymentLabel, "err", err)
-		return nil
-	}
-
-	for _, deploy := range deployList.Items {
-		return &deploy
-	}
-
-	return nil
 }
 
 func (c *controller) run(stop <-chan struct{}) error {
@@ -531,9 +507,9 @@ func (c *controller) sync() {
 
 	c.populate(hashrings, statefulsets)
 
-	if err := c.saveHashring(hashrings); err != nil {
+	if err := c.saveHashring(hashrings, cm); err != nil {
 		c.reconcileErrors.WithLabelValues(save).Inc()
-		level.Error(c.logger).Log("msg", "failed to save hashrings", "err", err)
+		level.Error(c.logger).Log("msg", "failed to save hashrings")
 	}
 }
 
@@ -561,7 +537,7 @@ func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets m
 	}
 }
 
-func (c *controller) saveHashring(hashring []receive.HashringConfig) error {
+func (c *controller) saveHashring(hashring []receive.HashringConfig, orgCM *corev1.ConfigMap) error {
 	buf, err := json.Marshal(hashring)
 	if err != nil {
 		return err
@@ -571,25 +547,19 @@ func (c *controller) saveHashring(hashring []receive.HashringConfig) error {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.options.configMapGeneratedName,
 			Namespace: c.options.namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: "v1",
+					Kind:       "ConfigMap",
+					Name:       orgCM.GetName(),
+					UID:        orgCM.GetUID(),
+				},
+			},
 		},
 		Data: map[string]string{
 			c.options.fileName: string(buf),
 		},
 		BinaryData: nil,
-	}
-
-	if c.controllerDeployment != nil {
-		isControlled := true
-
-		cm.SetOwnerReferences([]metav1.OwnerReference{
-			{
-				APIVersion: "apps/v1",
-				Kind:       "Deployment",
-				Controller: &isControlled,
-				Name:       c.controllerDeployment.GetName(),
-				UID:        c.controllerDeployment.GetUID(),
-			},
-		})
 	}
 
 	c.configmapHash.Set(hashAsMetricValue(buf))
