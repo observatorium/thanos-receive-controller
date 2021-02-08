@@ -507,7 +507,7 @@ func (c *controller) sync() {
 
 	c.populate(hashrings, statefulsets)
 
-	if err := c.saveHashring(hashrings); err != nil {
+	if err := c.saveHashring(hashrings, cm); err != nil {
 		c.reconcileErrors.WithLabelValues(save).Inc()
 		level.Error(c.logger).Log("msg", "failed to save hashrings")
 	}
@@ -537,7 +537,7 @@ func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets m
 	}
 }
 
-func (c *controller) saveHashring(hashring []receive.HashringConfig) error {
+func (c *controller) saveHashring(hashring []receive.HashringConfig, orgCM *corev1.ConfigMap) error {
 	buf, err := json.Marshal(hashring)
 	if err != nil {
 		return err
@@ -547,6 +547,14 @@ func (c *controller) saveHashring(hashring []receive.HashringConfig) error {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      c.options.configMapGeneratedName,
 			Namespace: c.options.namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					APIVersion: "v1",
+					Kind:       "ConfigMap",
+					Name:       orgCM.GetName(),
+					UID:        orgCM.GetUID(),
+				},
+			},
 		},
 		Data: map[string]string{
 			c.options.fileName: string(buf),
