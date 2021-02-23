@@ -20,14 +20,16 @@ func intPointer(i int32) *int32 {
 	return &i
 }
 
+// nolint:funlen
 func TestController(t *testing.T) {
 	port := 10901
 
 	for _, tt := range []struct {
-		name         string
-		hashrings    []receive.HashringConfig
-		statefulsets []*appsv1.StatefulSet
-		expected     []receive.HashringConfig
+		name          string
+		hashrings     []receive.HashringConfig
+		statefulsets  []*appsv1.StatefulSet
+		clusterDomain string
+		expected      []receive.HashringConfig
 	}{
 		{
 			name:     "Empty",
@@ -38,7 +40,8 @@ func TestController(t *testing.T) {
 			hashrings: []receive.HashringConfig{{
 				Hashring: "hashring0",
 			}},
-			expected: []receive.HashringConfig{{Hashring: "hashring0"}},
+			clusterDomain: "cluster.local",
+			expected:      []receive.HashringConfig{{Hashring: "hashring0"}},
 		},
 		{
 			name: "OneHashringOneStatefulSetNoMatch",
@@ -58,6 +61,7 @@ func TestController(t *testing.T) {
 					},
 				},
 			},
+			clusterDomain: "cluster.local",
 			expected: []receive.HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
@@ -84,6 +88,7 @@ func TestController(t *testing.T) {
 					},
 				},
 			},
+			clusterDomain: "cluster.local",
 			expected: []receive.HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
@@ -128,6 +133,7 @@ func TestController(t *testing.T) {
 					},
 				},
 			},
+			clusterDomain: "cluster.local",
 			expected: []receive.HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
@@ -174,6 +180,7 @@ func TestController(t *testing.T) {
 					},
 				},
 			},
+			clusterDomain: "cluster.local",
 			expected: []receive.HashringConfig{{
 				Hashring: "hashring0",
 				Tenants:  []string{"foo", "bar"},
@@ -190,18 +197,51 @@ func TestController(t *testing.T) {
 				},
 			}},
 		},
+		{
+			clusterDomain: "",
+			name:          "OneHashringOneStatefulSetNoClusterDomain",
+			hashrings: []receive.HashringConfig{{
+				Hashring: "hashring1",
+				Tenants:  []string{"fooo", "bar"},
+			}},
+			statefulsets: []*appsv1.StatefulSet{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "thanos-receive-hashring1",
+						Labels: map[string]string{
+							"a":              "b",
+							hashringLabelKey: "hashring1",
+						},
+					},
+					Spec: appsv1.StatefulSetSpec{
+						Replicas:    intPointer(3), //nolint,gonmd
+						ServiceName: "h0",
+					},
+				},
+			},
+			expected: []receive.HashringConfig{{
+				Hashring: "hashring1",
+				Tenants:  []string{"fooo", "bar"},
+				Endpoints: []string{
+					"thanos-receive-hashring1-0.h0.namespace.svc:10901",
+					"thanos-receive-hashring1-1.h0.namespace.svc:10901",
+					"thanos-receive-hashring1-2.h0.namespace.svc:10901",
+				},
+			}},
+		},
 	} {
 		name := tt.name
 		hashrings := tt.hashrings
 		statefulsets := tt.statefulsets
 		expected := tt.expected
+		clusterDomain := tt.clusterDomain
 
 		t.Run(name, func(t *testing.T) {
 			opts := &options{
 				labelKey:               "a",
 				labelValue:             "b",
 				fileName:               "hashrings.json",
-				clusterDomain:          "cluster.local",
+				clusterDomain:          clusterDomain,
 				configMapName:          "original",
 				configMapGeneratedName: "generated",
 				namespace:              "namespace",

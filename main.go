@@ -517,14 +517,21 @@ func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets m
 	for i, h := range hashrings {
 		if sts, exists := statefulsets[h.Hashring]; exists {
 			var endpoints []string
+
 			for i := 0; i < int(*sts.Spec.Replicas); i++ {
+				// If cluster domain is empty string we don't want dot after svc.
+				clusterDomain := ""
+				if c.options.clusterDomain != "" {
+					clusterDomain = fmt.Sprintf(".%s", c.options.clusterDomain)
+				}
+
 				endpoints = append(endpoints,
-					fmt.Sprintf("%s-%d.%s.%s.svc.%s:%d",
+					fmt.Sprintf("%s-%d.%s.%s.svc%s:%d",
 						sts.Name,
 						i,
 						sts.Spec.ServiceName,
 						c.options.namespace,
-						c.options.clusterDomain,
+						clusterDomain,
 						c.options.port,
 					),
 				)
