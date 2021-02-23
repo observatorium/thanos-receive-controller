@@ -234,10 +234,10 @@ func TestController(t *testing.T) {
 }
 
 func TestEndpointGenerationWithEmptyClusterName(t *testing.T) {
-	port := 10901 
+	port := 10901
 
 	name := "OneHashringOneStatefulSet"
-	hashrings :=  []receive.HashringConfig{{
+	hashrings := []receive.HashringConfig{{
 		Hashring: "hashring0",
 		Tenants:  []string{"foo", "bar"},
 	}}
