@@ -20,6 +20,7 @@ func intPointer(i int32) *int32 {
 	return &i
 }
 
+// nolint:funlen
 func TestController(t *testing.T) {
 	port := 10901
 
