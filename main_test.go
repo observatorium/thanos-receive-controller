@@ -233,7 +233,7 @@ func TestController(t *testing.T) {
 	}
 }
 
-func TestEndpointGenerationWithEmptyCluterName(t *testing.T) {
+func TestEndpointGenerationWithEmptyClusterName(t *testing.T) {
 	port := 10901 
 
 	name := "OneHashringOneStatefulSet"
