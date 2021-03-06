@@ -145,7 +145,6 @@ function(params) {
         for port in trc.service.spec.ports
       ],
       securityContext: {
-        fsGroup: 65534,
         runAsUser: 65534,
       },
       resources: if trc.config.resources != {} then trc.config.resources else {},
@@ -168,6 +167,9 @@ function(params) {
           },
           spec: {
             containers: [c],
+            securityContext: {
+              fsGroup: 65534,
+            },
             serviceAccount: trc.serviceAccount.metadata.name,
           },
         },
