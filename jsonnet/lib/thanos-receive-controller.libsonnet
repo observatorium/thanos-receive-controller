@@ -144,6 +144,10 @@ function(params) {
         { name: port.name, containerPort: port.port }
         for port in trc.service.spec.ports
       ],
+      securityContext: {
+        fsGroup: 65534,
+        runAsUser: 65534,
+      },
       resources: if trc.config.resources != {} then trc.config.resources else {},
     };
 
