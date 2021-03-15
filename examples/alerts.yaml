@@ -3,7 +3,7 @@ groups:
   rules:
   - alert: ThanosReceiveControllerIsDown
     annotations:
-      message: Thanos Receive Controller has disappeared from Prometheus target discovery.
+      message: Thanos Receive Controller has disappeared from {{$labels.namespace}}. Prometheus target for the component cannot be discovered.
     expr: |
       absent(up{job=~"thanos-receive-controller.*"} == 1)
     for: 5m
@@ -11,40 +11,37 @@ groups:
       severity: critical
   - alert: ThanosReceiveControllerReconcileErrorRate
     annotations:
-      message: Thanos Receive Controller failing to reconcile changes, {{ $value | humanize }}% of attempts failed.
+      message: Thanos Receive Controller from {{$labels.namespace}} is failing to reconcile changes, {{ $value | humanize }}% of attempts failed.
     expr: |
-      sum(
-        rate(thanos_receive_controller_reconcile_errors_total{job=~"thanos-receive-controller.*"}[5m])
-        /
-        on (namespace) group_left
-        rate(thanos_receive_controller_reconcile_attempts_total{job=~"thanos-receive-controller.*"}[5m])
+      (
+        sum by (namespace, job) (rate(thanos_receive_controller_reconcile_errors_total{job=~"thanos-receive-controller.*"}[5m]))
+      /
+        sum by (namespace, job) (rate(thanos_receive_controller_reconcile_attempts_total{job=~"thanos-receive-controller.*"}[5m]))
       ) * 100 >= 10
     for: 5m
     labels:
       severity: warning
   - alert: ThanosReceiveControllerConfigmapChangeErrorRate
     annotations:
-      message: Thanos Receive Controller failing to refresh configmap, {{ $value | humanize }}% of attempts failed.
+      message: Thanos Receive Controller from {{$labels.namespace}} is failing to refresh configmap, {{ $value | humanize }}% of attempts failed.
     expr: |
-      sum(
-        rate(thanos_receive_controller_configmap_change_errors_total{job=~"thanos-receive-controller.*"}[5m])
-        /
-        on (namespace) group_left
-        rate(thanos_receive_controller_configmap_change_attempts_total{job=~"thanos-receive-controller.*"}[5m])
+      (
+        sum by (namespace, job) (rate(thanos_receive_controller_configmap_change_errors_total{job=~"thanos-receive-controller.*"}[5m]))
+      /
+        sum by (namespace, job) (rate(thanos_receive_controller_configmap_change_attempts_total{job=~"thanos-receive-controller.*"}[5m]))
       ) * 100 >= 10
     for: 5m
     labels:
       severity: warning
   - alert: ThanosReceiveConfigInconsistent
     annotations:
-      message: The configuration of the instances of Thanos Receive `{{$labels.job}}` are out of sync.
+      message: The configuration of the instances of Thanos Receive `{{$labels.job}}` from {{$labels.namespace}} are out of sync.
     expr: |
-      avg(thanos_receive_config_hash{job=~"thanos-receive.*"}) BY (namespace, job)
-        /
-      on (namespace)
-      group_left
-      thanos_receive_controller_configmap_hash{job=~"thanos-receive-controller.*"}
-      != 1
+      (
+        avg by (namespace, job) (thanos_receive_config_hash{job=~"thanos-receive-default.*"})
+      / on (namespace) group_left
+        thanos_receive_controller_configmap_hash{job=~"thanos-receive-controller.*"} != 1
+      )
     for: 5m
     labels:
       severity: critical
