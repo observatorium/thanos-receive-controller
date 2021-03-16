@@ -16,7 +16,7 @@
   dashboard+:: {
     prefix: 'Thanos / ',
     tags: ['thanos-receive-controller-mixin', 'observatorium'],
-    commonSelector: ['%s="$%s"' % [level, level] for level in std.objectFields(thanos.hierarcies)],
-    commonAggregator: ['%s' % level for level in std.objectFields(thanos.hierarcies)],
+    selector: ['%s="$%s"' % [level, level] for level in std.objectFields(thanos.hierarcies)],
+    aggregator: ['%s' % level for level in std.objectFields(thanos.hierarcies)],
   },
 }

@@ -45,7 +45,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "thanos_receive_controller_reconcile_attempts_total{job=~\"thanos-receive-controller.*\"}",
+                     "expr": "sum by (namespace, job) (rate(thanos_receive_controller_reconcile_attempts_total{namespace=\"$namespace\", job=\"$job\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "rate",
@@ -121,7 +121,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (namespace, job, type) (rate(thanos_receive_controller_reconcile_errors_total{job=~\"thanos-receive-controller.*\"}[$interval]))",
+                     "expr": "sum by (namespace, job, type) (rate(thanos_receive_controller_reconcile_errors_total{namespace=\"$namespace\", job=\"$job\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{type}}",
@@ -209,7 +209,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "thanos_receive_controller_configmap_change_attempts_total{job=~\"thanos-receive-controller.*\"}",
+                     "expr": "sum by (namespace, job) (rate(thanos_receive_controller_configmap_change_attempts_total{namespace=\"$namespace\", job=\"$job\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "rate",
@@ -285,7 +285,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum sum by (namespace, job, type) (rate(thanos_receive_controller_configmap_change_errors_total{job=~\"thanos-receive-controller.*\"}[$interval]))",
+                     "expr": "sum sum by (namespace, job, type) (rate(thanos_receive_controller_configmap_change_errors_total{namespace=\"$namespace\", job=\"$job\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{type}}",
@@ -539,7 +539,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "avg by (namespace, job, name) (thanos_receive_controller_hashring_nodes{job=~\"thanos-receive-controller.*\"})",
+                     "expr": "avg by (namespace, job, name) (thanos_receive_controller_hashring_nodes{namespace=\"$namespace\", job=\"$job\"})",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "receive controller {{name}}",
@@ -623,7 +623,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "avg by (namespace, job, name) (thanos_receive_controller_hashring_tenants{job=~\"thanos-receive-controller.*\"})",
+                     "expr": "avg by (namespace, job, name) (thanos_receive_controller_hashring_tenants{namespace=\"$namespace\", job=\"$job\"})",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "receive controller {{name}}",
@@ -722,7 +722,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "time() - max by (namespace, job, name) (thanos_receive_controller_configmap_last_reload_success_timestamp_seconds{job=~\"thanos-receive-controller.*\"})",
+                     "expr": "time() - max by (namespace, job, name) (thanos_receive_controller_configmap_last_reload_success_timestamp_seconds{namespace=\"$namespace\", job=\"$job\"})",
                      "format": "time_series",
                      "instant": true,
                      "intervalFactor": 2,
@@ -800,7 +800,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "time() - max by (namespace, job, name) (thanos_receive_config_last_reload_success_timestamp_seconds{job=~\"thanos-receive-controller.*\"})",
+                     "expr": "time() - max by (namespace, job, name) (thanos_receive_config_last_reload_success_timestamp_seconds{namespace=\"$namespace\", job=\"$job\"})",
                      "format": "time_series",
                      "instant": true,
                      "intervalFactor": 2,
@@ -907,7 +907,7 @@
             "multi": false,
             "name": "job",
             "options": [ ],
-            "query": "label_values(up{namespace, job, namespace=\"$namespace\", job=\"$job\"}, job)",
+            "query": "label_values(up{namespace=\"$namespace\", job=\"$job\"}, job)",
             "refresh": 1,
             "regex": "",
             "sort": 2,

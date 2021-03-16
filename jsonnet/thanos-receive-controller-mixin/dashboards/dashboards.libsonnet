@@ -2,10 +2,14 @@ local g = (import 'grafana-builder/grafana.libsonnet');
 
 {
   local thanos = self,
+  receiveController+:: {
+    dashboard: {
+      selector: std.join(', ', thanos.dashboard.selector + ['job="$job"']),
+      receiveSelector: thanos.receiveController.receiveSelector,
+      aggregator: std.join(', ', thanos.dashboard.aggregator + ['job']),
+    },
+  },
   grafanaDashboards+:: {
-    local selector = std.join(', ', thanos.dashboard.commonSelector + ['job="$job"']),
-    local aggregator = std.join(', ', thanos.dashboard.commonAggregator + ['job']),
-
     'receive-controller.json':
       g.dashboard(thanos.receiveController.title)
       .addRow(
@@ -13,14 +17,14 @@ local g = (import 'grafana-builder/grafana.libsonnet');
         .addPanel(
           g.panel('Rate') +
           g.queryPanel(
-            'thanos_receive_controller_reconcile_attempts_total{%(selector)s}' % thanos.receiveController,
+            'sum by (%(aggregator)s) (rate(thanos_receive_controller_reconcile_attempts_total{%(selector)s}[$interval]))' % thanos.receiveController.dashboard,
             'rate'
           )
         )
         .addPanel(
           g.panel('Errors') +
           g.queryPanel(
-            'sum by (%(aggregator)s, type) (rate(thanos_receive_controller_reconcile_errors_total{%(selector)s}[$interval]))' % thanos.receiveController,
+            'sum by (%(aggregator)s, type) (rate(thanos_receive_controller_reconcile_errors_total{%(selector)s}[$interval]))' % thanos.receiveController.dashboard,
             '{{type}}'
           ) +
           { yaxes: g.yaxes('percentunit') } +
@@ -32,14 +36,14 @@ local g = (import 'grafana-builder/grafana.libsonnet');
         .addPanel(
           g.panel('Rate') +
           g.queryPanel(
-            'thanos_receive_controller_configmap_change_attempts_total{%(selector)s}' % thanos.receiveController,
+            'sum by (%(aggregator)s) (rate(thanos_receive_controller_configmap_change_attempts_total{%(selector)s}[$interval]))' % thanos.receiveController.dashboard,
             'rate',
           )
         )
         .addPanel(
           g.panel('Errors') +
           g.queryPanel(
-            'sum sum by (%(aggregator)s, type) (rate(thanos_receive_controller_configmap_change_errors_total{%(selector)s}[$interval]))' % thanos.receiveController,
+            'sum sum by (%(aggregator)s, type) (rate(thanos_receive_controller_configmap_change_errors_total{%(selector)s}[$interval]))' % thanos.receiveController.dashboard,
             '{{type}}'
           ) +
           { yaxes: g.yaxes('percentunit') } +
@@ -51,14 +55,14 @@ local g = (import 'grafana-builder/grafana.libsonnet');
         .addPanel(
           g.panel('Rate') +
           g.queryPanel(
-            'sum by (%(aggregator)s, type) (rate(thanos_receive_hashrings_file_changes_total{%(receiveSelector)s}[$interval]))' % thanos.receiveController,
+            'sum by (%(aggregator)s, type) (rate(thanos_receive_hashrings_file_changes_total{%(receiveSelector)s}[$interval]))' % thanos.receiveController.dashboard,
             'all'
           )
         )
         .addPanel(
           g.panel('Errors') +
           {
-            local expr(selector) = 'sum by (%s) (rate(%s[$interval]))' % [aggregator, selector],
+            local expr(selector) = 'sum by (%s) (rate(%s[$interval]))' % [thanos.receiveController.dashboard.aggregator, selector],
 
             aliasColors: {
               'error': '#E24D42',
@@ -66,8 +70,8 @@ local g = (import 'grafana-builder/grafana.libsonnet');
             targets: [
               {
                 expr: '%s / %s' % [
-                  expr('thanos_receive_hashrings_file_errors_total{%(receiveSelector)s}' % thanos.receiveController),
-                  expr('thanos_receive_hashrings_file_changes_total{%(receiveSelector)s}' % thanos.receiveController),
+                  expr('thanos_receive_hashrings_file_errors_total{%(receiveSelector)s}' % thanos.receiveController.dashboard),
+                  expr('thanos_receive_hashrings_file_changes_total{%(receiveSelector)s}' % thanos.receiveController.dashboard),
                 ],
                 format: 'time_series',
                 intervalFactor: 2,
@@ -86,8 +90,8 @@ local g = (import 'grafana-builder/grafana.libsonnet');
           g.panel('Nodes per Hashring') +
           g.queryPanel(
             [
-              'avg by (%(aggregator)s, name) (thanos_receive_controller_hashring_nodes{%(selector)s})' % thanos.receiveController,
-              'avg by (%(aggregator)s, name) (thanos_receive_hashring_nodes{%(receiveSelector)s})' % thanos.receiveController,
+              'avg by (%(aggregator)s, name) (thanos_receive_controller_hashring_nodes{%(selector)s})' % thanos.receiveController.dashboard,
+              'avg by (%(aggregator)s, name) (thanos_receive_hashring_nodes{%(receiveSelector)s})' % thanos.receiveController.dashboard,
             ],
             [
               'receive controller {{name}}',
@@ -99,8 +103,8 @@ local g = (import 'grafana-builder/grafana.libsonnet');
           g.panel('Tenants per Hashring') +
           g.queryPanel(
             [
-              'avg by (%(aggregator)s, name) (thanos_receive_controller_hashring_tenants{%(selector)s})' % thanos.receiveController,
-              'avg by (%(aggregator)s, name) (thanos_receive_hashring_tenants{%(receiveSelector)s})' % thanos.receiveController,
+              'avg by (%(aggregator)s, name) (thanos_receive_controller_hashring_tenants{%(selector)s})' % thanos.receiveController.dashboard,
+              'avg by (%(aggregator)s, name) (thanos_receive_hashring_tenants{%(receiveSelector)s})' % thanos.receiveController.dashboard,
             ],
             [
               'receive controller {{name}}',
@@ -114,7 +118,7 @@ local g = (import 'grafana-builder/grafana.libsonnet');
         .addPanel(
           g.panel('Last Updated') +
           g.statPanel(
-            'time() - max by (%(aggregator)s, name) (thanos_receive_controller_configmap_last_reload_success_timestamp_seconds{%(selector)s})' % thanos.receiveController,
+            'time() - max by (%(aggregator)s, name) (thanos_receive_controller_configmap_last_reload_success_timestamp_seconds{%(selector)s})' % thanos.receiveController.dashboard,
             's'
           ) +
           {
@@ -125,7 +129,7 @@ local g = (import 'grafana-builder/grafana.libsonnet');
         .addPanel(
           g.panel('Last Updated') +
           g.statPanel(
-            'time() - max by (%(aggregator)s, name) (thanos_receive_config_last_reload_success_timestamp_seconds{%(selector)s})' % thanos.receiveController,
+            'time() - max by (%(aggregator)s, name) (thanos_receive_config_last_reload_success_timestamp_seconds{%(selector)s})' % thanos.receiveController.dashboard,
             's'
           ) +
           {
@@ -151,7 +155,7 @@ local g = (import 'grafana-builder/grafana.libsonnet');
             template.new(
               'job',
               '$datasource',
-              'label_values(up{%s, %s}, job)' % [aggregator, selector],
+              'label_values(up{%(selector)s}, job)' % thanos.receiveController.dashboard,
               label='job',
               refresh=1,
               sort=2,
