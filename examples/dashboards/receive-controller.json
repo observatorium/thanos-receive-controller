@@ -451,7 +451,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum by (namespace=\"$namespace\", job) (rate(thanos_receive_hashrings_file_errors_total{job=~\"thanos-receive-default.*\"}[$interval])) / sum by (namespace=\"$namespace\", job) (rate(thanos_receive_hashrings_file_changes_total{job=~\"thanos-receive-default.*\"}[$interval]))",
+                     "expr": "sum by (namespace, job) (rate(thanos_receive_hashrings_file_errors_total{job=~\"thanos-receive-default.*\"}[$interval])) / sum by (namespace, job) (rate(thanos_receive_hashrings_file_changes_total{job=~\"thanos-receive-default.*\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "error",
@@ -907,7 +907,7 @@
             "multi": false,
             "name": "job",
             "options": [ ],
-            "query": "label_values(up{namespace=\"$namespace\", job, namespace=\"$namespace\", job=\"$job\"}, job)",
+            "query": "label_values(up{namespace, job, namespace=\"$namespace\", job=\"$job\"}, job)",
             "refresh": 1,
             "regex": "",
             "sort": 2,
