@@ -40,8 +40,7 @@ spec:
         - containerPort: 8080
           name: http
         resources: {}
-        securityContext:
-          runAsUser: 65534
       securityContext:
         fsGroup: 65534
+        runAsUser: 65534
       serviceAccount: thanos-receive-controller
