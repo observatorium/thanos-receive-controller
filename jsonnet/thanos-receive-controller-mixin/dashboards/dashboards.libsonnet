@@ -55,7 +55,7 @@ local g = (import 'grafana-builder/grafana.libsonnet');
         .addPanel(
           g.panel('Rate') +
           g.queryPanel(
-            'sum by (%(aggregator)s, type) (rate(thanos_receive_hashrings_file_changes_total{%(receiveSelector)s}[$interval]))' % thanos.receiveController.dashboard,
+            'sum by (%(aggregator)s) (rate(thanos_receive_hashrings_file_changes_total{%(receiveSelector)s}[$interval]))' % thanos.receiveController.dashboard,
             'all'
           )
         )
@@ -155,7 +155,7 @@ local g = (import 'grafana-builder/grafana.libsonnet');
             template.new(
               'job',
               '$datasource',
-              'label_values(up{%(selector)s}, job)' % thanos.receiveController.dashboard,
+              'label_values(up{%(selector)s}, job)' % thanos.receiveController,
               label='job',
               refresh=1,
               sort=2,
