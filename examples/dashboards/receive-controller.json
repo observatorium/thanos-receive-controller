@@ -285,7 +285,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "sum sum by (namespace, job, type) (rate(thanos_receive_controller_configmap_change_errors_total{namespace=\"$namespace\", job=\"$job\"}[$interval]))",
+                     "expr": "sum by (namespace, job, type) (rate(thanos_receive_controller_configmap_change_errors_total{namespace=\"$namespace\", job=\"$job\"}[$interval]))",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{type}}",
@@ -722,7 +722,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "time() - max by (namespace, job, name) (thanos_receive_controller_configmap_last_reload_success_timestamp_seconds{namespace=\"$namespace\", job=\"$job\"})",
+                     "expr": "time() - max by (namespace, job) (thanos_receive_controller_configmap_last_reload_success_timestamp_seconds{namespace=\"$namespace\", job=\"$job\"})",
                      "format": "time_series",
                      "instant": true,
                      "intervalFactor": 2,
@@ -800,7 +800,7 @@
                "steppedLine": false,
                "targets": [
                   {
-                     "expr": "time() - max by (namespace, job, name) (thanos_receive_config_last_reload_success_timestamp_seconds{namespace=\"$namespace\", job=\"$job\"})",
+                     "expr": "time() - max by (namespace, job) (thanos_receive_config_last_reload_success_timestamp_seconds{namespace=\"$namespace\", job=\"$job\"})",
                      "format": "time_series",
                      "instant": true,
                      "intervalFactor": 2,

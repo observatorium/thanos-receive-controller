@@ -43,7 +43,7 @@ local g = (import 'grafana-builder/grafana.libsonnet');
         .addPanel(
           g.panel('Errors') +
           g.queryPanel(
-            'sum sum by (%(aggregator)s, type) (rate(thanos_receive_controller_configmap_change_errors_total{%(selector)s}[$interval]))' % thanos.receiveController.dashboard,
+            'sum by (%(aggregator)s, type) (rate(thanos_receive_controller_configmap_change_errors_total{%(selector)s}[$interval]))' % thanos.receiveController.dashboard,
             '{{type}}'
           ) +
           { yaxes: g.yaxes('percentunit') } +
@@ -118,7 +118,7 @@ local g = (import 'grafana-builder/grafana.libsonnet');
         .addPanel(
           g.panel('Last Updated') +
           g.statPanel(
-            'time() - max by (%(aggregator)s, name) (thanos_receive_controller_configmap_last_reload_success_timestamp_seconds{%(selector)s})' % thanos.receiveController.dashboard,
+            'time() - max by (%(aggregator)s) (thanos_receive_controller_configmap_last_reload_success_timestamp_seconds{%(selector)s})' % thanos.receiveController.dashboard,
             's'
           ) +
           {
@@ -129,7 +129,7 @@ local g = (import 'grafana-builder/grafana.libsonnet');
         .addPanel(
           g.panel('Last Updated') +
           g.statPanel(
-            'time() - max by (%(aggregator)s, name) (thanos_receive_config_last_reload_success_timestamp_seconds{%(selector)s})' % thanos.receiveController.dashboard,
+            'time() - max by (%(aggregator)s) (thanos_receive_config_last_reload_success_timestamp_seconds{%(selector)s})' % thanos.receiveController.dashboard,
             's'
           ) +
           {
