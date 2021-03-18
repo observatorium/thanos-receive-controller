@@ -1,5 +1,5 @@
 groups:
-- name: thanos-receive-controller.rules
+- name: thanos-receive-controller
   rules:
   - alert: ThanosReceiveControllerIsDown
     annotations:
