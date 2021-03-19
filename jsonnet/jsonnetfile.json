@@ -22,11 +22,11 @@
     {
       "source": {
         "git": {
-          "remote": "https://github.com/thanos-io/thanos",
+          "remote": "https://github.com/kakkoyun/thanos",
           "subdir": "mixin"
         }
       },
-      "version": "main",
+      "version": "mixin_add_alert_namespaces",
       "name": "thanos-mixin"
     },
     {
