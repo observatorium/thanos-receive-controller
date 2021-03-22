@@ -518,7 +518,7 @@ func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets m
 		if sts, exists := statefulsets[h.Hashring]; exists {
 			var endpoints []string
 
-			for i := 0; i < int(*sts.Spec.Replicas); i++ {
+			for i := 0; i < int(sts.Status.ReadyReplicas); i++ {
 				// If cluster domain is empty string we don't want dot after svc.
 				clusterDomain := ""
 				if c.options.clusterDomain != "" {
