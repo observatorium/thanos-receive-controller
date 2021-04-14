@@ -5,13 +5,13 @@ import (
 	"crypto/md5" //nolint:gosec
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	stdlog "log"
 	"net/http"
 	"net/http/pprof"
 	"os"
-	"os/signal"
 	"strings"
 	"sync"
 	"syscall"
@@ -20,7 +20,6 @@ import (
 	"github.com/go-kit/kit/log"
 	"github.com/go-kit/kit/log/level"
 	"github.com/oklog/run"
-	"github.com/pkg/errors"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/thanos-io/thanos/pkg/receive"
@@ -29,6 +28,7 @@ import (
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/util/wait"
 	appsinformers "k8s.io/client-go/informers/apps/v1"
 	coreinformers "k8s.io/client-go/informers/core/v1"
 	"k8s.io/client-go/kubernetes"
@@ -40,6 +40,7 @@ type label = string
 
 const (
 	resyncPeriod                  = 5 * time.Minute
+	defaultScaleTimeout           = 5 * time.Second
 	internalServerShutdownTimeout = time.Second
 	hashringLabelKey              = "controller.receive.thanos.io/hashring"
 
@@ -47,6 +48,7 @@ const (
 	fetch  label = "fetch"
 	decode label = "decode"
 	save   label = "save"
+	poll   label = "poll"
 	create label = "create"
 	update label = "update"
 	other  label = "other"
@@ -64,6 +66,7 @@ func main() {
 		Port                   int
 		Scheme                 string
 		InternalAddr           string
+		ScaleTimeout           time.Duration
 	}{}
 
 	flag.StringVar(&config.KubeConfig, "kubeconfig", "", "Path to kubeconfig")
@@ -76,6 +79,7 @@ func main() {
 	flag.IntVar(&config.Port, "port", 10901, "The port on which receive components are listening for write requests")
 	flag.StringVar(&config.Scheme, "scheme", "http", "The URL scheme on which receive components accept write requests")
 	flag.StringVar(&config.InternalAddr, "internal-addr", ":8080", "The address on which internal server runs")
+	flag.DurationVar(&config.ScaleTimeout, "scale-timeout", defaultScaleTimeout, "A timeout to wait for receivers to really start after they report healthy")
 	flag.Parse()
 
 	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
@@ -109,16 +113,7 @@ func main() {
 
 	var g run.Group
 	{
-		// Signal channels must be buffered.
-		sig := make(chan os.Signal, 1)
-		g.Add(func() error {
-			signal.Notify(sig, os.Interrupt, syscall.SIGTERM)
-			<-sig
-			return nil
-		}, func(_ error) {
-			level.Info(logger).Log("msg", "caught interrupt")
-			close(sig)
-		})
+		g.Add(run.SignalHandler(context.Background(), os.Interrupt, syscall.SIGTERM))
 	}
 	{
 		opt := &options{
@@ -131,6 +126,7 @@ func main() {
 			scheme:                 config.Scheme,
 			labelKey:               labelKey,
 			labelValue:             labelValue,
+			scaleTimeout:           config.ScaleTimeout,
 		}
 		c := newController(klient, logger, opt)
 		c.registerMetrics(reg)
@@ -300,12 +296,16 @@ type options struct {
 	scheme                 string
 	labelKey               string
 	labelValue             string
+	scaleTimeout           time.Duration
 }
 
 type controller struct {
 	options *options
 	queue   *queue
 	logger  log.Logger
+
+	// should be fine without a mutex, as sync only ever runs once at a time.
+	replicas map[string]int32
 
 	klient  kubernetes.Interface
 	cmapInf cache.SharedIndexInformer
@@ -330,6 +330,8 @@ func newController(klient kubernetes.Interface, logger log.Logger, o *options) *
 		options: o,
 		queue:   newQueue(),
 		logger:  logger,
+
+		replicas: make(map[string]int32),
 
 		klient:  klient,
 		cmapInf: coreinformers.NewConfigMapInformer(klient, o.namespace, resyncPeriod, nil),
@@ -390,6 +392,7 @@ func (c *controller) registerMetrics(reg *prometheus.Registry) {
 		c.reconcileErrors.WithLabelValues(fetch).Add(0)
 		c.reconcileErrors.WithLabelValues(decode).Add(0)
 		c.reconcileErrors.WithLabelValues(save).Add(0)
+		c.reconcileErrors.WithLabelValues(poll).Add(0)
 		c.configmapChangeAttempts.Add(0)
 		c.configmapChangeErrors.WithLabelValues(create).Add(0)
 		c.configmapChangeErrors.WithLabelValues(update).Add(0)
@@ -435,6 +438,8 @@ func (c *controller) run(stop <-chan struct{}) error {
 	return nil
 }
 
+var errCacheSync = errors.New("failed to sync caches")
+
 // waitForCacheSync waits for the informers' caches to be synced.
 func (c *controller) waitForCacheSync(stop <-chan struct{}) error {
 	ok := true
@@ -457,7 +462,7 @@ func (c *controller) waitForCacheSync(stop <-chan struct{}) error {
 	}
 
 	if !ok {
-		return errors.New("failed to sync caches")
+		return errCacheSync
 	}
 
 	level.Info(c.logger).Log("msg", "successfully synced all caches")
@@ -502,7 +507,26 @@ func (c *controller) sync() {
 			continue
 		}
 
+		// If there's an increase in replicas we poll for the new replicas to be ready
+		if _, ok := c.replicas[hashring]; ok && c.replicas[hashring] < *sts.Spec.Replicas {
+			// Iterate over new replicas to wait until they are running
+			for i := c.replicas[hashring]; i < *sts.Spec.Replicas; i++ {
+				start := time.Now()
+				podName := fmt.Sprintf("%s-%d", sts.Name, i)
+
+				if err := c.waitForPod(podName); err != nil {
+					level.Warn(c.logger).Log("msg", "failed polling until pod is ready", "pod", podName, "duration", time.Since(start), "err", err)
+					continue
+				}
+
+				level.Debug(c.logger).Log("msg", "waited until new pod was ready", "pod", podName, "duration", time.Since(start))
+			}
+		}
+
+		c.replicas[hashring] = *sts.Spec.Replicas
 		statefulsets[hashring] = sts.DeepCopy()
+
+		time.Sleep(c.options.scaleTimeout) // Give some time for all replicas before they receive hundreds req/s
 	}
 
 	c.populate(hashrings, statefulsets)
@@ -511,6 +535,26 @@ func (c *controller) sync() {
 		c.reconcileErrors.WithLabelValues(save).Inc()
 		level.Error(c.logger).Log("msg", "failed to save hashrings")
 	}
+}
+
+func (c controller) waitForPod(name string) error {
+	return wait.PollImmediate(time.Second, time.Minute, func() (bool, error) {
+		pod, err := c.klient.CoreV1().Pods(c.options.namespace).Get(name, metav1.GetOptions{})
+		if kerrors.IsNotFound(err) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		switch pod.Status.Phase {
+		case corev1.PodRunning:
+			return true, nil
+		case corev1.PodFailed, corev1.PodPending, corev1.PodSucceeded, corev1.PodUnknown:
+			return false, nil
+		default:
+			return false, nil
+		}
+	})
 }
 
 func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets map[string]*appsv1.StatefulSet) {
