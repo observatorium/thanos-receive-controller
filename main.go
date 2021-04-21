@@ -304,9 +304,6 @@ type controller struct {
 	queue   *queue
 	logger  log.Logger
 
-	// should be fine without a mutex, as sync only ever runs once at a time.
-	replicas map[string]int32
-
 	klient  kubernetes.Interface
 	cmapInf cache.SharedIndexInformer
 	ssetInf cache.SharedIndexInformer
@@ -330,8 +327,6 @@ func newController(klient kubernetes.Interface, logger log.Logger, o *options) *
 		options: o,
 		queue:   newQueue(),
 		logger:  logger,
-
-		replicas: make(map[string]int32),
 
 		klient:  klient,
 		cmapInf: coreinformers.NewConfigMapInformer(klient, o.namespace, resyncPeriod, nil),
@@ -497,7 +492,7 @@ func (c *controller) sync() {
 		return
 	}
 
-	statefulsets := make(map[string]*appsv1.StatefulSet)
+	statefulsetEndPoints := make(map[string][]string)
 
 	for _, obj := range c.ssetInf.GetStore().List() {
 		sts := obj.(*appsv1.StatefulSet)
@@ -507,29 +502,43 @@ func (c *controller) sync() {
 			continue
 		}
 
-		// If there's an increase in replicas we poll for the new replicas to be ready
-		if _, ok := c.replicas[hashring]; ok && c.replicas[hashring] < *sts.Spec.Replicas {
-			// Iterate over new replicas to wait until they are running
-			for i := c.replicas[hashring]; i < *sts.Spec.Replicas; i++ {
-				start := time.Now()
-				podName := fmt.Sprintf("%s-%d", sts.Name, i)
+		var endpoints []string
+		// Iterate over new replicas to wait until they are running
+		for i := 0; i < int(*sts.Spec.Replicas); i++ {
+			start := time.Now()
+			podName := fmt.Sprintf("%s-%d", sts.Name, i)
 
-				if err := c.waitForPod(podName); err != nil {
-					level.Warn(c.logger).Log("msg", "failed polling until pod is ready", "pod", podName, "duration", time.Since(start), "err", err)
-					continue
-				}
-
-				level.Debug(c.logger).Log("msg", "waited until new pod was ready", "pod", podName, "duration", time.Since(start))
+			if err := c.waitForPod(podName); err != nil {
+				level.Warn(c.logger).Log("msg", "failed polling until pod is ready", "pod", podName, "duration", time.Since(start), "err", err)
+				continue
 			}
+
+			level.Debug(c.logger).Log("msg", "waited until new pod was ready", "pod", podName, "duration", time.Since(start))
+
+			// If cluster domain is empty string we don't want dot after svc.
+			clusterDomain := ""
+			if c.options.clusterDomain != "" {
+				clusterDomain = fmt.Sprintf(".%s", c.options.clusterDomain)
+			}
+
+			endpoints = append(endpoints,
+				fmt.Sprintf("%s-%d.%s.%s.svc%s:%d",
+					sts.Name,
+					i,
+					sts.Spec.ServiceName,
+					c.options.namespace,
+					clusterDomain,
+					c.options.port,
+				),
+			)
 		}
 
-		c.replicas[hashring] = *sts.Spec.Replicas
-		statefulsets[hashring] = sts.DeepCopy()
+		statefulsetEndPoints[hashring] = endpoints
 
 		time.Sleep(c.options.scaleTimeout) // Give some time for all replicas before they receive hundreds req/s
 	}
 
-	c.populate(hashrings, statefulsets)
+	c.populate(hashrings, statefulsetEndPoints)
 
 	if err := c.saveHashring(hashrings, cm); err != nil {
 		c.reconcileErrors.WithLabelValues(save).Inc()
@@ -557,32 +566,11 @@ func (c controller) waitForPod(name string) error {
 	})
 }
 
-func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets map[string]*appsv1.StatefulSet) {
+func (c *controller) populate(hashrings []receive.HashringConfig, statefulsetEndPoints map[string][]string) {
 	for i, h := range hashrings {
-		if sts, exists := statefulsets[h.Hashring]; exists {
-			var endpoints []string
-
-			for i := 0; i < int(*sts.Spec.Replicas); i++ {
-				// If cluster domain is empty string we don't want dot after svc.
-				clusterDomain := ""
-				if c.options.clusterDomain != "" {
-					clusterDomain = fmt.Sprintf(".%s", c.options.clusterDomain)
-				}
-
-				endpoints = append(endpoints,
-					fmt.Sprintf("%s-%d.%s.%s.svc%s:%d",
-						sts.Name,
-						i,
-						sts.Spec.ServiceName,
-						c.options.namespace,
-						clusterDomain,
-						c.options.port,
-					),
-				)
-			}
-
-			hashrings[i].Endpoints = endpoints
-			c.hashringNodes.WithLabelValues(h.Hashring).Set(float64(len(endpoints)))
+		if stsEndPoints, exists := statefulsetEndPoints[h.Hashring]; exists {
+			hashrings[i].Endpoints = stsEndPoints
+			c.hashringNodes.WithLabelValues(h.Hashring).Set(float64(len(stsEndPoints)))
 			c.hashringTenants.WithLabelValues(h.Hashring).Set(float64(len(h.Tenants)))
 		}
 	}

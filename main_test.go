@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"strconv"
 	"testing"
 	"time"
 
@@ -86,6 +87,9 @@ func TestController(t *testing.T) {
 						Replicas:    intPointer(3), //nolint,gonmd
 						ServiceName: "h0",
 					},
+					Status: appsv1.StatefulSetStatus{
+						ReadyReplicas: int32(3), //nolint,gonmd
+					},
 				},
 			},
 			clusterDomain: "cluster.local",
@@ -131,6 +135,9 @@ func TestController(t *testing.T) {
 						Replicas:    intPointer(123), //nolint,gonmd
 						ServiceName: "h123",
 					},
+					Status: appsv1.StatefulSetStatus{
+						ReadyReplicas: int32(3), //nolint,gonmd
+					},
 				},
 			},
 			clusterDomain: "cluster.local",
@@ -164,6 +171,9 @@ func TestController(t *testing.T) {
 					Spec: appsv1.StatefulSetSpec{
 						Replicas:    intPointer(3), //nolint,gonmd
 						ServiceName: "h0",
+					},
+					Status: appsv1.StatefulSetStatus{
+						ReadyReplicas: int32(3), //nolint,gonmd
 					},
 				},
 				{
@@ -216,6 +226,9 @@ func TestController(t *testing.T) {
 					Spec: appsv1.StatefulSetSpec{
 						Replicas:    intPointer(3), //nolint,gonmd
 						ServiceName: "h0",
+					},
+					Status: appsv1.StatefulSetStatus{
+						ReadyReplicas: int32(3), //nolint,gonmd
 					},
 				},
 			},
@@ -421,6 +434,7 @@ func createInitialResources(t *testing.T, klient kubernetes.Interface, opts *opt
 			opts.fileName: string(buf),
 		},
 	}
+
 	if _, err := klient.CoreV1().ConfigMaps(opts.namespace).Create(cm); err != nil {
 		t.Fatalf("got unexpected error creating ConfigMap: %v", err)
 	}
@@ -428,6 +442,15 @@ func createInitialResources(t *testing.T, klient kubernetes.Interface, opts *opt
 	for _, sts := range statefulsets {
 		if _, err := klient.AppsV1().StatefulSets(opts.namespace).Create(sts); err != nil {
 			t.Fatalf("got unexpected error creating StatefulSet: %v", err)
+		}
+
+		for i := 0; i < int(*sts.Spec.Replicas); i++ {
+			podName := sts.Name + string("-") + strconv.Itoa(i)
+			pod := &corev1.Pod{ObjectMeta: metav1.ObjectMeta{Name: podName}, Status: corev1.PodStatus{Phase: corev1.PodRunning}}
+
+			if _, err = klient.CoreV1().Pods(opts.namespace).Create(pod); err != nil {
+				t.Fatalf("got unexpected error creating pods for StatefulSet: %v", err)
+			}
 		}
 	}
 
