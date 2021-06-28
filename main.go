@@ -503,7 +503,7 @@ func (c *controller) sync() {
 		}
 
 		var endpoints []string
-		// Iterate over new replicas to wait until they are running
+		// Iterate over all the replicas to wait for 1-minute for any non-Ready replicas to reach Ready status.
 		for i := 0; i < int(*sts.Spec.Replicas); i++ {
 			start := time.Now()
 			podName := fmt.Sprintf("%s-%d", sts.Name, i)
