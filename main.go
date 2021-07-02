@@ -538,7 +538,14 @@ func (c *controller) sync() {
 		time.Sleep(c.options.scaleTimeout) // Give some time for all replicas before they receive hundreds req/s
 	}
 
-	c.populate(hashrings, statefulsetEndPoints)
+	// Populate hasnring with Statefulset replicas in the ready status.
+	for i, h := range hashrings {
+		if stsEndPoints, exists := statefulsetEndPoints[h.Hashring]; exists {
+			hashrings[i].Endpoints = stsEndPoints
+			c.hashringNodes.WithLabelValues(h.Hashring).Set(float64(len(stsEndPoints)))
+			c.hashringTenants.WithLabelValues(h.Hashring).Set(float64(len(h.Tenants)))
+		}
+	}
 
 	if err := c.saveHashring(hashrings, cm); err != nil {
 		c.reconcileErrors.WithLabelValues(save).Inc()
@@ -564,16 +571,6 @@ func (c controller) waitForPod(name string) error {
 			return false, nil
 		}
 	})
-}
-
-func (c *controller) populate(hashrings []receive.HashringConfig, statefulsetEndPoints map[string][]string) {
-	for i, h := range hashrings {
-		if stsEndPoints, exists := statefulsetEndPoints[h.Hashring]; exists {
-			hashrings[i].Endpoints = stsEndPoints
-			c.hashringNodes.WithLabelValues(h.Hashring).Set(float64(len(stsEndPoints)))
-			c.hashringTenants.WithLabelValues(h.Hashring).Set(float64(len(h.Tenants)))
-		}
-	}
 }
 
 func (c *controller) saveHashring(hashring []receive.HashringConfig, orgCM *corev1.ConfigMap) error {
