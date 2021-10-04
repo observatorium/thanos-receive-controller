@@ -12,6 +12,7 @@ local defaults = {
   resources: {},
   serviceMonitor: false,
   ports: { http: 8080 },
+  clusterDomain: '',
 
   commonLabels:: {
     'app.kubernetes.io/name': 'thanos-receive-controller',
@@ -142,7 +143,12 @@ function(params) {
         '--configmap-generated-name=%s-generated' % trc.configmap.metadata.name,
         '--file-name=hashrings.json',
         '--namespace=$(NAMESPACE)',
-      ],
+      ] +
+      (
+        if std.length(trc.config.clusterDomain) > 0 then [
+          '--cluster-domain=%s' % trc.config.clusterDomain,
+        ] else []
+      ),
       env: [
         { name: 'NAMESPACE', valueFrom: { fieldRef: { fieldPath: 'metadata.namespace' } } },
       ],
