@@ -7,6 +7,7 @@ local defaults = {
   namespace: error 'must provide namespace',
   version: error 'must provide version',
   image: error 'must provide image',
+  imagePullPolicy: 'IfNotPresent',
   replicas: error 'must provide replicas',
   hashrings: error 'must provide hashring configuration',
   resources: {},
@@ -138,6 +139,7 @@ function(params) {
     local c = {
       name: 'thanos-receive-controller',
       image: trc.config.image,
+      imagePullPolicy: trc.config.imagePullPolicy,
       args: [
         '--configmap-name=%s' % trc.configmap.metadata.name,
         '--configmap-generated-name=%s-generated' % trc.configmap.metadata.name,
