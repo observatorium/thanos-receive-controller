@@ -66,6 +66,7 @@ func main() {
 		Port                   int
 		Scheme                 string
 		InternalAddr           string
+		AllowOnlyReadyReplicas bool
 		ScaleTimeout           time.Duration
 	}{}
 
@@ -79,6 +80,7 @@ func main() {
 	flag.IntVar(&config.Port, "port", 10901, "The port on which receive components are listening for write requests")
 	flag.StringVar(&config.Scheme, "scheme", "http", "The URL scheme on which receive components accept write requests")
 	flag.StringVar(&config.InternalAddr, "internal-addr", ":8080", "The address on which internal server runs")
+	flag.BoolVar(&config.AllowOnlyReadyReplicas, "allow-only-ready-replicas", false, "The flag enables Hashring to contain addresses of Thanos Receive replicas in the Ready status")
 	flag.DurationVar(&config.ScaleTimeout, "scale-timeout", defaultScaleTimeout, "A timeout to wait for receivers to really start after they report healthy")
 	flag.Parse()
 
@@ -126,6 +128,7 @@ func main() {
 			scheme:                 config.Scheme,
 			labelKey:               labelKey,
 			labelValue:             labelValue,
+			allowOnlyReadyReplicas: config.AllowOnlyReadyReplicas,
 			scaleTimeout:           config.ScaleTimeout,
 		}
 		c := newController(klient, logger, opt)
@@ -296,6 +299,7 @@ type options struct {
 	scheme                 string
 	labelKey               string
 	labelValue             string
+	allowOnlyReadyReplicas bool
 	scaleTimeout           time.Duration
 }
 
@@ -506,27 +510,28 @@ func (c *controller) sync() {
 		if !ok {
 			continue
 		}
+		// For scale up, a replica turning from Ready to non-Ready status cases, readiness is checked right before adding a replica to the hashring.
+		if !c.options.allowOnlyReadyReplicas {
+			// If there's an increase in replicas we poll for the new replicas to be ready
+			if _, ok := c.replicas[hashring]; ok && c.replicas[hashring] < *sts.Spec.Replicas {
+				// Iterate over new replicas to wait until they are running
+				for i := c.replicas[hashring]; i < *sts.Spec.Replicas; i++ {
+					start := time.Now()
+					podName := fmt.Sprintf("%s-%d", sts.Name, i)
 
-		// If there's an increase in replicas we poll for the new replicas to be ready
-		if _, ok := c.replicas[hashring]; ok && c.replicas[hashring] < *sts.Spec.Replicas {
-			// Iterate over new replicas to wait until they are running
-			for i := c.replicas[hashring]; i < *sts.Spec.Replicas; i++ {
-				start := time.Now()
-				podName := fmt.Sprintf("%s-%d", sts.Name, i)
+					if err := c.waitForPod(podName); err != nil {
+						level.Warn(c.logger).Log("msg", "failed polling until pod is ready", "pod", podName, "duration", time.Since(start), "err", err)
+						continue
+					}
 
-				if err := c.waitForPod(podName); err != nil {
-					level.Warn(c.logger).Log("msg", "failed polling until pod is ready", "pod", podName, "duration", time.Since(start), "err", err)
-					continue
+					level.Debug(c.logger).Log("msg", "waited until new pod was ready", "pod", podName, "duration", time.Since(start))
 				}
-
-				level.Debug(c.logger).Log("msg", "waited until new pod was ready", "pod", podName, "duration", time.Since(start))
 			}
+			time.Sleep(c.options.scaleTimeout) // Give some time for all replicas before they receive hundreds req/s
 		}
 
 		c.replicas[hashring] = *sts.Spec.Replicas
 		statefulsets[hashring] = sts.DeepCopy()
-
-		time.Sleep(c.options.scaleTimeout) // Give some time for all replicas before they receive hundreds req/s
 	}
 
 	c.populate(hashrings, statefulsets)
@@ -563,6 +568,18 @@ func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets m
 			var endpoints []string
 
 			for i := 0; i < int(*sts.Spec.Replicas); i++ {
+
+				// Do not add a replica to the hashring if polling fails.
+				if c.options.allowOnlyReadyReplicas {
+
+					podName := fmt.Sprintf("%s-%d", sts.Name, i)
+
+					if err := c.waitForPod(podName); err != nil {
+						level.Warn(c.logger).Log("msg", "failed polling until pod is ready", "pod", podName, "err", err)
+						continue
+					}
+				}
+
 				// If cluster domain is empty string we don't want dot after svc.
 				clusterDomain := ""
 				if c.options.clusterDomain != "" {
