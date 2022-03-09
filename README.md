@@ -59,6 +59,7 @@ spec:
         - --file-name=hashrings.json
         image: quay.io/observatorium/thanos-receive-controller
         name: thanos-receive-controller
+EOF
 ```
 
 Finally, deploy StatefulSets of Thanos receivers labeled with `controller.receive.thanos.io=thanos-receive-controller`.
