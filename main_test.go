@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -22,6 +23,7 @@ func intPointer(i int32) *int32 {
 
 // nolint:funlen
 func TestController(t *testing.T) {
+	ctx := context.Background()
 	port := 10901
 
 	for _, tt := range []struct {
@@ -56,7 +58,7 @@ func TestController(t *testing.T) {
 						Labels: map[string]string{"a": "b"},
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas:    intPointer(3), //nolint,gonmd
+						Replicas:    intPointer(3),
 						ServiceName: "h0",
 					},
 				},
@@ -83,7 +85,7 @@ func TestController(t *testing.T) {
 						},
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas:    intPointer(3), //nolint,gonmd
+						Replicas:    intPointer(3),
 						ServiceName: "h0",
 					},
 				},
@@ -115,7 +117,7 @@ func TestController(t *testing.T) {
 						},
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas:    intPointer(3), //nolint,gonmd
+						Replicas:    intPointer(3),
 						ServiceName: "h0",
 					},
 				},
@@ -128,7 +130,7 @@ func TestController(t *testing.T) {
 						},
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas:    intPointer(123), //nolint,gonmd
+						Replicas:    intPointer(123),
 						ServiceName: "h123",
 					},
 				},
@@ -162,7 +164,7 @@ func TestController(t *testing.T) {
 						},
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas:    intPointer(3), //nolint,gonmd
+						Replicas:    intPointer(3),
 						ServiceName: "h0",
 					},
 				},
@@ -175,7 +177,7 @@ func TestController(t *testing.T) {
 						},
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas:    intPointer(2), //nolint,gonmd
+						Replicas:    intPointer(2),
 						ServiceName: "h1",
 					},
 				},
@@ -214,7 +216,7 @@ func TestController(t *testing.T) {
 						},
 					},
 					Spec: appsv1.StatefulSetSpec{
-						Replicas:    intPointer(3), //nolint,gonmd
+						Replicas:    intPointer(3),
 						ServiceName: "h0",
 					},
 				},
@@ -249,14 +251,14 @@ func TestController(t *testing.T) {
 				scheme:                 "http",
 			}
 			klient := fake.NewSimpleClientset()
-			cleanUp := setupController(t, klient, opts)
+			cleanUp := setupController(ctx, t, klient, opts)
 			defer cleanUp()
 
-			_ = createInitialResources(t, klient, opts, hashrings, statefulsets)
+			_ = createInitialResources(ctx, t, klient, opts, hashrings, statefulsets)
 
 			// Reconciliation is async, so we need to wait a bit.
 			<-time.After(reconciliationDelay)
-			cm, err := klient.CoreV1().ConfigMaps(opts.namespace).Get(opts.configMapGeneratedName, metav1.GetOptions{})
+			cm, err := klient.CoreV1().ConfigMaps(opts.namespace).Get(ctx, opts.configMapGeneratedName, metav1.GetOptions{})
 			if err != nil {
 				t.Fatalf("got unexpected error getting ConfigMap: %v", err)
 			}
@@ -274,6 +276,7 @@ func TestController(t *testing.T) {
 }
 
 func TestControllerConfigmapUpdate(t *testing.T) {
+	ctx := context.Background()
 	port := 10901
 	originalHashrings := []receive.HashringConfig{{
 		Hashring: "hashring0",
@@ -329,7 +332,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 			}
 			klient := fake.NewSimpleClientset()
 
-			cm := createInitialResources(t, klient, opts,
+			cm := createInitialResources(ctx, t, klient, opts,
 				originalHashrings,
 				[]*appsv1.StatefulSet{
 					{
@@ -341,7 +344,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 							},
 						},
 						Spec: appsv1.StatefulSetSpec{
-							Replicas:    intPointer(3), //nolint,gonmd
+							Replicas:    intPointer(3),
 							ServiceName: "h0",
 						},
 					},
@@ -361,16 +364,16 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 					opts.fileName: string(buf),
 				},
 			}
-			if _, err = klient.CoreV1().ConfigMaps(opts.namespace).Create(gcm); err != nil {
+			if _, err = klient.CoreV1().ConfigMaps(opts.namespace).Create(ctx, gcm, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("got unexpected error creating ConfigMap: %v", err)
 			}
 
-			cleanUp := setupController(t, klient, opts)
+			cleanUp := setupController(ctx, t, klient, opts)
 			defer cleanUp()
 
 			// Reconciliation is async, so we need to wait a bit.
 			<-time.After(reconciliationDelay)
-			gcm, err = klient.CoreV1().ConfigMaps(opts.namespace).Get(opts.configMapGeneratedName, metav1.GetOptions{})
+			gcm, err = klient.CoreV1().ConfigMaps(opts.namespace).Get(ctx, opts.configMapGeneratedName, metav1.GetOptions{})
 			if err != nil {
 				t.Fatalf("got unexpected error getting ConfigMap: %v", err)
 			}
@@ -390,14 +393,16 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 	}
 }
 
-func setupController(t *testing.T, klient kubernetes.Interface, opts *options) func() {
+func setupController(ctx context.Context, t *testing.T, klient kubernetes.Interface, opts *options) func() {
+	t.Helper()
+
 	c := newController(klient, nil, opts)
 	stop := make(chan struct{})
 
 	//nolint:staticcheck
 	go func() {
-		if err := c.run(stop); err != nil {
-			t.Fatalf("got unexpected error: %v", err)
+		if err := c.run(ctx, stop); err != nil {
+			t.Errorf("got unexpected error: %v", err)
 		}
 	}()
 
@@ -406,7 +411,16 @@ func setupController(t *testing.T, klient kubernetes.Interface, opts *options) f
 	}
 }
 
-func createInitialResources(t *testing.T, klient kubernetes.Interface, opts *options, hashrings []receive.HashringConfig, statefulsets []*appsv1.StatefulSet) *corev1.ConfigMap {
+func createInitialResources(
+	ctx context.Context,
+	t *testing.T,
+	klient kubernetes.Interface,
+	opts *options,
+	hashrings []receive.HashringConfig,
+	statefulsets []*appsv1.StatefulSet,
+) *corev1.ConfigMap {
+	t.Helper()
+
 	buf, err := json.Marshal(hashrings)
 	if err != nil {
 		t.Fatalf("got unexpected error marshaling initial hashrings: %v", err)
@@ -421,12 +435,12 @@ func createInitialResources(t *testing.T, klient kubernetes.Interface, opts *opt
 			opts.fileName: string(buf),
 		},
 	}
-	if _, err := klient.CoreV1().ConfigMaps(opts.namespace).Create(cm); err != nil {
+	if _, err := klient.CoreV1().ConfigMaps(opts.namespace).Create(ctx, cm, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("got unexpected error creating ConfigMap: %v", err)
 	}
 
 	for _, sts := range statefulsets {
-		if _, err := klient.AppsV1().StatefulSets(opts.namespace).Create(sts); err != nil {
+		if _, err := klient.AppsV1().StatefulSets(opts.namespace).Create(ctx, sts, metav1.CreateOptions{}); err != nil {
 			t.Fatalf("got unexpected error creating StatefulSet: %v", err)
 		}
 	}

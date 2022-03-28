@@ -9,20 +9,20 @@ platform:
 steps:
 - name: test
   pull: always
-  image: golang:1.14.2
+  image: golang:1.17.8
   commands:
   - make test
 
 - name: lint
   pull: always
-  image: golang:1.14.2
+  image: golang:1.17.8
   commands:
   - make lint
   - git diff --exit-code
 
 - name: build
   pull: always
-  image: golang:1.14.2
+  image: golang:1.17.8
   commands:
   - make thanos-receive-controller
 
@@ -34,7 +34,7 @@ steps:
   - git diff --exit-code
 
 - name: tags
-  image: golang:1.14.2
+  image: golang:1.17.8
   commands:
   - echo -n "$(git rev-parse --abbrev-ref HEAD | tr / -)-$(date +%Y-%m-%d)-$(git rev-parse --short HEAD),latest" > .tags
   when:

@@ -141,16 +141,16 @@ function(params) {
       image: trc.config.image,
       imagePullPolicy: trc.config.imagePullPolicy,
       args: [
-        '--configmap-name=%s' % trc.configmap.metadata.name,
-        '--configmap-generated-name=%s-generated' % trc.configmap.metadata.name,
-        '--file-name=hashrings.json',
-        '--namespace=$(NAMESPACE)',
-      ] +
-      (
-        if std.length(trc.config.clusterDomain) > 0 then [
-          '--cluster-domain=%s' % trc.config.clusterDomain,
-        ] else []
-      ),
+              '--configmap-name=%s' % trc.configmap.metadata.name,
+              '--configmap-generated-name=%s-generated' % trc.configmap.metadata.name,
+              '--file-name=hashrings.json',
+              '--namespace=$(NAMESPACE)',
+            ] +
+            (
+              if std.length(trc.config.clusterDomain) > 0 then [
+                '--cluster-domain=%s' % trc.config.clusterDomain,
+              ] else []
+            ),
       env: [
         { name: 'NAMESPACE', valueFrom: { fieldRef: { fieldPath: 'metadata.namespace' } } },
       ],
