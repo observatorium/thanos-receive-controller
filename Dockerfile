@@ -1,4 +1,4 @@
-FROM golang:1.16-alpine3.12 as builder
+FROM golang:1.17-alpine3.15 as builder
 
 WORKDIR /workspace
 
@@ -8,7 +8,7 @@ RUN apk update && apk upgrade && apk add --no-cache alpine-sdk
 
 RUN  make thanos-receive-controller
 
-FROM gcr.io/distroless/static:latest
+FROM scratch
 
 COPY --from=builder /workspace/thanos-receive-controller /usr/bin/thanos-receive-controller
 
