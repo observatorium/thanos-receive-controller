@@ -17,10 +17,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/go-kit/kit/log"
-	"github.com/go-kit/kit/log/level"
+	"github.com/go-kit/log"
+	"github.com/go-kit/log/level"
 	"github.com/oklog/run"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/collectors"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/thanos-io/thanos/pkg/receive"
 	appsv1 "k8s.io/api/apps/v1"
@@ -39,6 +40,8 @@ import (
 type label = string
 
 const (
+	defaultPort = 10901
+
 	resyncPeriod                  = 5 * time.Minute
 	defaultScaleTimeout           = 5 * time.Second
 	internalServerShutdownTimeout = time.Second
@@ -76,7 +79,7 @@ func main() {
 	flag.StringVar(&config.ConfigMapName, "configmap-name", "", "The name of the original ConfigMap containing the hashring tenant configuration")
 	flag.StringVar(&config.ConfigMapGeneratedName, "configmap-generated-name", "", "The name of the generated and populated ConfigMap")
 	flag.StringVar(&config.FileName, "file-name", "", "The name of the configuration file in the ConfigMap")
-	flag.IntVar(&config.Port, "port", 10901, "The port on which receive components are listening for write requests")
+	flag.IntVar(&config.Port, "port", defaultPort, "The port on which receive components are listening for write requests")
 	flag.StringVar(&config.Scheme, "scheme", "http", "The URL scheme on which receive components accept write requests")
 	flag.StringVar(&config.InternalAddr, "internal-addr", ":8080", "The address on which internal server runs")
 	flag.DurationVar(&config.ScaleTimeout, "scale-timeout", defaultScaleTimeout, "A timeout to wait for receivers to really start after they report healthy")
@@ -86,12 +89,7 @@ func main() {
 	logger = log.WithPrefix(logger, "ts", log.DefaultTimestampUTC)
 	logger = log.WithPrefix(logger, "caller", log.DefaultCaller)
 
-	parts := strings.Split(config.StatefulSetLabel, "=")
-	if len(parts) != 2 { //nolint,gonmd
-		stdlog.Fatal("--statefulset-label must be of the form 'key=value'")
-	}
-
-	labelKey, labelValue := parts[0], parts[1]
+	labelKey, labelValue := splitLabel(config.StatefulSetLabel)
 
 	konfig, err := clientcmd.BuildConfigFromFlags("", config.KubeConfig)
 	if err != nil {
@@ -105,8 +103,8 @@ func main() {
 
 	reg := prometheus.NewRegistry()
 	reg.MustRegister(
-		prometheus.NewGoCollector(),
-		prometheus.NewProcessCollector(prometheus.ProcessCollectorOpts{}),
+		collectors.NewGoCollector(),
+		collectors.NewProcessCollector(collectors.ProcessCollectorOpts{}),
 	)
 
 	cache.SetReflectorMetricsProvider(newReflectorMetrics(reg))
@@ -133,7 +131,7 @@ func main() {
 		done := make(chan struct{})
 
 		g.Add(func() error {
-			return c.run(done)
+			return c.run(context.TODO(), done)
 		}, func(_ error) {
 			level.Info(logger).Log("msg", "shutting down controller")
 			close(done)
@@ -252,6 +250,17 @@ func newReflectorMetrics(reg *prometheus.Registry) prometheusReflectorMetrics {
 	}
 
 	return m
+}
+
+const labelParts = 2
+
+func splitLabel(in string) (key, value string) {
+	parts := strings.Split(in, "=")
+	if len(parts) != labelParts {
+		stdlog.Fatal("--statefulset-label must be of the form 'key=value'")
+	}
+
+	return parts[0], parts[1]
 }
 
 func (p prometheusReflectorMetrics) NewListsMetric(name string) cache.CounterMetric {
@@ -410,7 +419,7 @@ func (c *controller) registerMetrics(reg *prometheus.Registry) {
 	}
 }
 
-func (c *controller) run(stop <-chan struct{}) error {
+func (c *controller) run(ctx context.Context, stop <-chan struct{}) error {
 	defer c.queue.stop()
 
 	go c.cmapInf.Run(stop)
@@ -431,7 +440,7 @@ func (c *controller) run(stop <-chan struct{}) error {
 		UpdateFunc: func(_, _ interface{}) { c.queue.add() },
 	})
 
-	go c.worker()
+	go c.worker(ctx)
 
 	<-stop
 
@@ -470,13 +479,15 @@ func (c *controller) waitForCacheSync(stop <-chan struct{}) error {
 	return nil
 }
 
-func (c *controller) worker() {
+func (c *controller) worker(ctx context.Context) {
 	for c.queue.get() {
-		c.sync()
+		c.sync(ctx)
 	}
 }
 
-func (c *controller) sync() {
+//nolint:cyclop
+// //nolint:godox TODO(pgough) - linter is complaining about complexity because 13 (this) > 10 (default)
+func (c *controller) sync(ctx context.Context) {
 	c.reconcileAttempts.Inc()
 	configMap, ok, err := c.cmapInf.GetStore().GetByKey(fmt.Sprintf("%s/%s", c.options.namespace, c.options.configMapName))
 
@@ -487,7 +498,10 @@ func (c *controller) sync() {
 		return
 	}
 
-	cm := configMap.(*corev1.ConfigMap)
+	cm, ok := configMap.(*corev1.ConfigMap)
+	if !ok {
+		level.Error(c.logger).Log("msg", "failed type assertion from expected ConfigMap")
+	}
 
 	var hashrings []receive.HashringConfig
 	if err := json.Unmarshal([]byte(cm.Data[c.options.fileName]), &hashrings); err != nil {
@@ -500,9 +514,12 @@ func (c *controller) sync() {
 	statefulsets := make(map[string]*appsv1.StatefulSet)
 
 	for _, obj := range c.ssetInf.GetStore().List() {
-		sts := obj.(*appsv1.StatefulSet)
-		hashring, ok := sts.Labels[hashringLabelKey]
+		sts, ok := obj.(*appsv1.StatefulSet)
+		if !ok {
+			level.Error(c.logger).Log("msg", "failed type assertion from expected StatefulSet")
+		}
 
+		hashring, ok := sts.Labels[hashringLabelKey]
 		if !ok {
 			continue
 		}
@@ -514,7 +531,7 @@ func (c *controller) sync() {
 				start := time.Now()
 				podName := fmt.Sprintf("%s-%d", sts.Name, i)
 
-				if err := c.waitForPod(podName); err != nil {
+				if err := c.waitForPod(ctx, podName); err != nil {
 					level.Warn(c.logger).Log("msg", "failed polling until pod is ready", "pod", podName, "duration", time.Since(start), "err", err)
 					continue
 				}
@@ -531,15 +548,15 @@ func (c *controller) sync() {
 
 	c.populate(hashrings, statefulsets)
 
-	if err := c.saveHashring(hashrings, cm); err != nil {
+	if err := c.saveHashring(ctx, hashrings, cm); err != nil {
 		c.reconcileErrors.WithLabelValues(save).Inc()
 		level.Error(c.logger).Log("msg", "failed to save hashrings")
 	}
 }
 
-func (c controller) waitForPod(name string) error {
+func (c controller) waitForPod(ctx context.Context, name string) error {
 	return wait.PollImmediate(time.Second, time.Minute, func() (bool, error) {
-		pod, err := c.klient.CoreV1().Pods(c.options.namespace).Get(name, metav1.GetOptions{})
+		pod, err := c.klient.CoreV1().Pods(c.options.namespace).Get(ctx, name, metav1.GetOptions{})
 		if kerrors.IsNotFound(err) {
 			return false, nil
 		}
@@ -588,7 +605,7 @@ func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets m
 	}
 }
 
-func (c *controller) saveHashring(hashring []receive.HashringConfig, orgCM *corev1.ConfigMap) error {
+func (c *controller) saveHashring(ctx context.Context, hashring []receive.HashringConfig, orgCM *corev1.ConfigMap) error {
 	buf, err := json.Marshal(hashring)
 	if err != nil {
 		return err
@@ -615,10 +632,10 @@ func (c *controller) saveHashring(hashring []receive.HashringConfig, orgCM *core
 
 	c.configmapHash.Set(hashAsMetricValue(buf))
 	c.configmapChangeAttempts.Inc()
-	gcm, err := c.klient.CoreV1().ConfigMaps(c.options.namespace).Get(c.options.configMapGeneratedName, metav1.GetOptions{})
+	gcm, err := c.klient.CoreV1().ConfigMaps(c.options.namespace).Get(ctx, c.options.configMapGeneratedName, metav1.GetOptions{})
 
 	if kerrors.IsNotFound(err) {
-		_, err = c.klient.CoreV1().ConfigMaps(c.options.namespace).Create(cm)
+		_, err = c.klient.CoreV1().ConfigMaps(c.options.namespace).Create(ctx, cm, metav1.CreateOptions{})
 		if err != nil {
 			c.configmapChangeErrors.WithLabelValues(create).Inc()
 			return err
@@ -638,7 +655,7 @@ func (c *controller) saveHashring(hashring []receive.HashringConfig, orgCM *core
 		return nil
 	}
 
-	_, err = c.klient.CoreV1().ConfigMaps(c.options.namespace).Update(cm)
+	_, err = c.klient.CoreV1().ConfigMaps(c.options.namespace).Update(ctx, cm, metav1.UpdateOptions{})
 	if err != nil {
 		c.configmapChangeErrors.WithLabelValues(update).Inc()
 		return err
@@ -654,7 +671,7 @@ func hashAsMetricValue(data []byte) float64 {
 	sum := md5.Sum(data) //nolint:gosec
 	// We only want 48 bits as a float64 only has a 53 bit mantissa.
 	smallSum := sum[0:6]
-	bytes := make([]byte, 8)
+	bytes := make([]byte, 8) //nolint:gomnd
 	copy(bytes, smallSum)
 
 	return float64(binary.LittleEndian.Uint64(bytes))
