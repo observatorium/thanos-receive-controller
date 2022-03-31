@@ -1,0 +1,52 @@
+name: checks
+on:
+  pull_request:
+  push:
+    branches:
+      - 'master'
+      - 'main'
+    tags:
+      - 'v*'
+jobs:
+  lint:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+    name: Lint
+    steps:
+    - uses: actions/checkout@v3
+    - name: Import environment variables from file
+      run: cat ".github/env" >> $GITHUB_ENV
+    - uses: actions/setup-go@v2
+      with:
+        go-version: '${{ env.golang-version }}'
+    - run: make --always-make lint && git diff --exit-code
+  generate:
+    runs-on: ubuntu-latest
+    name: Generate
+    steps:
+    - uses: actions/checkout@v3
+    - name: Import environment variables from file
+      run: cat ".github/env" >> $GITHUB_ENV
+    - uses: actions/setup-go@v2
+      with:
+        go-version: '${{ env.golang-version }}'
+    - run: make --always-make generate && git diff --exit-code
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os:
+          - ubuntu-latest
+    name: Build the binary
+    steps:
+    - uses: actions/checkout@v3
+    - name: Import environment variables from file
+      run: cat ".github/env" >> $GITHUB_ENV
+    - uses: actions/setup-go@v2
+      with:
+        go-version: '${{ env.golang-version }}'
+    - run: make thanos-receive-controller
+
