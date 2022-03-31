@@ -3,7 +3,7 @@
 The Thanos Receive Controller configures multiple hashrings of Thanos receivers running as StatefulSets on Kubernetes.  
 Based on an initial mapping of tenants to hashrings, the controller identifies the Pods in each hashring and generates a complete configuration file as a ConfigMap.
 
-[![Build Status](https://cloud.drone.io/api/badges/observatorium/thanos-receive-controller/status.svg)](https://cloud.drone.io/observatorium/thanos-receive-controller)
+[![Build Status](https://github.com/observatorium/thanos-receive-controller/actions/workflows/checks.yaml/badge.svg?branch=master)](https://github.com/observatorium/thanos-receive-controller/actions/workflows/checks.yaml)
 
 ## Getting Started
 
