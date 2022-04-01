@@ -1,5 +1,8 @@
 include .bingo/Variables.mk
 
+IMAGE?=quay.io/observatorium/thanos-receive-controller
+TAG?=$(shell echo "$(shell git rev-parse --abbrev-ref HEAD | tr / -)-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)")
+
 EXAMPLES := examples
 MANIFESTS := ${EXAMPLES}/manifests/
 DASHBOARDS := ${EXAMPLES}/dashboards/
@@ -81,3 +84,7 @@ clean:
 	rm -rf ${DASHBOARDS}
 	rm -rf ${ALERTS}
 	rm -rf ${RULES}
+
+.PHONY: image
+image:
+	docker build -t $(IMAGE):$(TAG) .
