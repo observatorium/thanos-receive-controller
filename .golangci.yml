@@ -14,10 +14,15 @@ linters:
   - nolintlint
   - testpackage
   - wrapcheck
+  - gomoddirectives
+  - ireturn
+  - varnamelen
+  - paralleltest
 
 linters-settings:
   errcheck:
-    exclude: .errcheck_excludes.txt
+    exclude-functions:
+      - '(github.com/go-kit/log.Logger).Log'
   lll:
     line-length: 200
   funlen:
