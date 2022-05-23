@@ -35,6 +35,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
+	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
 )
 
 type label = string
@@ -69,6 +70,7 @@ func main() {
 		Port                   int
 		Scheme                 string
 		InternalAddr           string
+		AllowOnlyReadyReplicas bool
 		ScaleTimeout           time.Duration
 	}{}
 
@@ -82,6 +84,7 @@ func main() {
 	flag.IntVar(&config.Port, "port", defaultPort, "The port on which receive components are listening for write requests")
 	flag.StringVar(&config.Scheme, "scheme", "http", "The URL scheme on which receive components accept write requests")
 	flag.StringVar(&config.InternalAddr, "internal-addr", ":8080", "The address on which internal server runs")
+	flag.BoolVar(&config.AllowOnlyReadyReplicas, "allow-only-ready-replicas", false, "Populate only Ready receiver replicas in the hashring configuration")
 	flag.DurationVar(&config.ScaleTimeout, "scale-timeout", defaultScaleTimeout, "A timeout to wait for receivers to really start after they report healthy")
 	flag.Parse()
 
@@ -124,6 +127,7 @@ func main() {
 			scheme:                 config.Scheme,
 			labelKey:               labelKey,
 			labelValue:             labelValue,
+			allowOnlyReadyReplicas: config.AllowOnlyReadyReplicas,
 			scaleTimeout:           config.ScaleTimeout,
 		}
 		c := newController(klient, logger, opt)
@@ -305,6 +309,7 @@ type options struct {
 	scheme                 string
 	labelKey               string
 	labelValue             string
+	allowOnlyReadyReplicas bool
 	scaleTimeout           time.Duration
 }
 
@@ -546,7 +551,7 @@ func (c *controller) sync(ctx context.Context) {
 		time.Sleep(c.options.scaleTimeout) // Give some time for all replicas before they receive hundreds req/s
 	}
 
-	c.populate(hashrings, statefulsets)
+	c.populate(ctx, hashrings, statefulsets)
 
 	if err := c.saveHashring(ctx, hashrings, cm); err != nil {
 		c.reconcileErrors.WithLabelValues(save).Inc()
@@ -565,6 +570,12 @@ func (c controller) waitForPod(ctx context.Context, name string) error {
 		}
 		switch pod.Status.Phase {
 		case corev1.PodRunning:
+			if c.options.allowOnlyReadyReplicas {
+				if podutil.IsPodReady(pod) {
+					return true, nil
+				}
+				return false, nil
+			}
 			return true, nil
 		case corev1.PodFailed, corev1.PodPending, corev1.PodSucceeded, corev1.PodUnknown:
 			return false, nil
@@ -574,12 +585,28 @@ func (c controller) waitForPod(ctx context.Context, name string) error {
 	})
 }
 
-func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets map[string]*appsv1.StatefulSet) {
+//nolint:nestif
+func (c *controller) populate(ctx context.Context, hashrings []receive.HashringConfig, statefulsets map[string]*appsv1.StatefulSet) {
 	for i, h := range hashrings {
 		if sts, exists := statefulsets[h.Hashring]; exists {
 			var endpoints []string
 
 			for i := 0; i < int(*sts.Spec.Replicas); i++ {
+				// Do not add a replica to the hashring if pod is not Ready.
+				if c.options.allowOnlyReadyReplicas {
+					podName := fmt.Sprintf("%s-%d", sts.Name, i)
+					pod, err := c.klient.CoreV1().Pods(c.options.namespace).Get(ctx, podName, metav1.GetOptions{})
+
+					if kerrors.IsNotFound(err) {
+						continue
+					}
+
+					if !podutil.IsPodReady(pod) {
+						level.Warn(c.logger).Log("msg", "failed adding pod to hashring, pod not ready", "pod", podName, "err", err)
+						continue
+					}
+				}
+
 				// If cluster domain is empty string we don't want dot after svc.
 				clusterDomain := ""
 				if c.options.clusterDomain != "" {
