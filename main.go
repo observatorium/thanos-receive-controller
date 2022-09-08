@@ -35,6 +35,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
+	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
 )
 
 type label = string
@@ -69,6 +70,7 @@ func main() {
 		Port                   int
 		Scheme                 string
 		InternalAddr           string
+		AllowOnlyReadyReplicas bool
 		ScaleTimeout           time.Duration
 	}{}
 
@@ -82,6 +84,7 @@ func main() {
 	flag.IntVar(&config.Port, "port", defaultPort, "The port on which receive components are listening for write requests")
 	flag.StringVar(&config.Scheme, "scheme", "http", "The URL scheme on which receive components accept write requests")
 	flag.StringVar(&config.InternalAddr, "internal-addr", ":8080", "The address on which internal server runs")
+	flag.BoolVar(&config.AllowOnlyReadyReplicas, "allow-only-ready-replicas", false, "Populate only Ready receiver replicas in the hashring configuration")
 	flag.DurationVar(&config.ScaleTimeout, "scale-timeout", defaultScaleTimeout, "A timeout to wait for receivers to really start after they report healthy")
 	flag.Parse()
 
@@ -124,6 +127,7 @@ func main() {
 			scheme:                 config.Scheme,
 			labelKey:               labelKey,
 			labelValue:             labelValue,
+			allowOnlyReadyReplicas: config.AllowOnlyReadyReplicas,
 			scaleTimeout:           config.ScaleTimeout,
 		}
 		c := newController(klient, logger, opt)
@@ -305,6 +309,7 @@ type options struct {
 	scheme                 string
 	labelKey               string
 	labelValue             string
+	allowOnlyReadyReplicas bool
 	scaleTimeout           time.Duration
 }
 
@@ -565,6 +570,12 @@ func (c controller) waitForPod(ctx context.Context, name string) error {
 		}
 		switch pod.Status.Phase {
 		case corev1.PodRunning:
+			if c.options.allowOnlyReadyReplicas {
+				if podutil.IsPodReady(pod) {
+					return true, nil
+				}
+				return false, nil
+			}
 			return true, nil
 		case corev1.PodFailed, corev1.PodPending, corev1.PodSucceeded, corev1.PodUnknown:
 			return false, nil
@@ -574,6 +585,7 @@ func (c controller) waitForPod(ctx context.Context, name string) error {
 	})
 }
 
+//nolint:nestif
 func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets map[string]*appsv1.StatefulSet) {
 	for i, h := range hashrings {
 		if sts, exists := statefulsets[h.Hashring]; exists {
