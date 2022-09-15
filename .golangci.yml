@@ -18,6 +18,7 @@ linters:
   - ireturn
   - varnamelen
   - paralleltest
+  - cyclop
 
 linters-settings:
   errcheck:
