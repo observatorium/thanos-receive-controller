@@ -27,10 +27,14 @@ jobs:
           tag=($echo "${{ env.image-repository }}:$(git rev-parse --abbrev-ref HEAD | tr / -)-$(date +%Y-%m-%d)-$(git rev-parse --short HEAD)")
           TAGS+=($echo $(echo $tag | awk '{ print tolower($1) }'))
           ( IFS=$','; echo "${TAGS[*]}" )
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1    
       - name: Build and publish image(s) to registry
         uses: docker/build-push-action@v2
         with:
           context: .
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           push: true
           tags: "${{ steps.images.outputs.IMAGES }}"
