@@ -1,6 +1,6 @@
 include .bingo/Variables.mk
 
-IMAGE?=quay.io/observatorium/thanos-receive-controller
+DOCKER_REPO?=quay.io/observatorium/thanos-receive-controller
 TAG?=$(shell echo "$(shell git rev-parse --abbrev-ref HEAD | tr / -)-$(shell date +%Y-%m-%d)-$(shell git rev-parse --short HEAD)")
 
 EXAMPLES := examples
@@ -10,6 +10,13 @@ ALERTS := ${EXAMPLES}/alerts.yaml
 RULES := ${EXAMPLES}/rules.yaml
 SRC = $(shell find . -type f -name '*.go' -not -path './vendor/*')
 JSONNET_SRC = $(shell find . -name 'vendor' -prune -o -name '*.libsonnet' -print -o -name '*.jsonnet' -print)
+
+
+VERSION := $(strip $(shell [ -d .git ] && git describe --always --tags --dirty))
+BUILD_DATE := $(shell date -u +"%Y-%m-%d")
+BUILD_TIMESTAMP := $(shell date -u +"%Y-%m-%dT%H:%M:%S%Z")
+VCS_BRANCH := $(strip $(shell git rev-parse --abbrev-ref HEAD))
+VCS_REF := $(strip $(shell [ -d .git ] && git rev-parse --short HEAD))
 
 all: generate validate fmt thanos-receive-controller
 
@@ -85,6 +92,54 @@ clean:
 	rm -rf ${ALERTS}
 	rm -rf ${RULES}
 
-.PHONY: image
-image:
-	docker build -t $(IMAGE):$(TAG) .
+.PHONY: container-build
+container-build:
+	# git update-index --refresh
+	docker buildx build \
+		--platform linux/amd64,linux/arm64 \
+		--cache-to type=local,dest=./.buildxcache/ \
+	    --build-arg BUILD_DATE="$(BUILD_TIMESTAMP)" \
+		--build-arg VERSION="$(VERSION)" \
+		--build-arg VCS_REF="$(VCS_REF)" \
+		--build-arg VCS_BRANCH="$(VCS_BRANCH)" \
+		--build-arg DOCKERFILE_PATH="/Dockerfile" \
+		-t $(DOCKER_REPO):$(VCS_BRANCH)-$(BUILD_DATE)-$(VERSION) \
+		-t $(DOCKER_REPO):latest \
+		.
+
+.PHONY: container-build-push
+container-build-push:
+	git update-index --refresh
+	@docker buildx build \
+		--push \
+		--platform linux/amd64,linux/arm64 \
+		--cache-to type=local,dest=./.buildxcache/ \
+	    --build-arg BUILD_DATE="$(BUILD_TIMESTAMP)" \
+		--build-arg VERSION="$(VERSION)" \
+		--build-arg VCS_REF="$(VCS_REF)" \
+		--build-arg VCS_BRANCH="$(VCS_BRANCH)" \
+		--build-arg DOCKERFILE_PATH="/Dockerfile" \
+		-t $(DOCKER_REPO):$(VCS_BRANCH)-$(BUILD_DATE)-$(VERSION) \
+		-t $(DOCKER_REPO):latest \
+		.
+
+.PHONY: conditional-container-build-push
+conditional-container-build-push:
+	build/conditional-container-push.sh $(DOCKER_REPO):$(VCS_BRANCH)-$(BUILD_DATE)-$(VERSION)
+
+.PHONY: container-release-build-push
+container-release-build-push: VERSION_TAG = $(strip $(shell [ -d .git ] && git tag --points-at HEAD))
+container-release-build-push: container-build-push
+	# https://git-scm.com/docs/git-tag#Documentation/git-tag.txt---points-atltobjectgt
+	@docker buildx build \
+		--push \
+		--platform linux/amd64,linux/arm64 \
+		--cache-from type=local,src=./.buildxcache/ \
+	    --build-arg BUILD_DATE="$(BUILD_TIMESTAMP)" \
+		--build-arg VERSION="$(VERSION)" \
+		--build-arg VCS_REF="$(VCS_REF)" \
+		--build-arg VCS_BRANCH="$(VCS_BRANCH)" \
+		--build-arg DOCKERFILE_PATH="/Dockerfile" \
+		-t $(DOCKER_REPO):$(VERSION_TAG) \
+		-t $(DOCKER_REPO):latest \
+		.
