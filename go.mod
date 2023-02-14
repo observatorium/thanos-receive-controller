@@ -10,7 +10,7 @@ require (
 	github.com/thanos-io/thanos v0.25.2
 	k8s.io/api v0.26.1
 	k8s.io/apimachinery v0.26.1
-	k8s.io/client-go v12.0.0+incompatible
+	k8s.io/client-go v0.26.1
 	k8s.io/kubectl v0.26.1
 )
 
@@ -107,7 +107,4 @@ require (
 	sigs.k8s.io/yaml v1.3.0 // indirect
 )
 
-replace (
-	github.com/vimeo/galaxycache => github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e
-	k8s.io/client-go => k8s.io/client-go v0.23.5
-)
+replace github.com/vimeo/galaxycache => github.com/thanos-community/galaxycache v0.0.0-20211122094458-3a32041a1f1e
