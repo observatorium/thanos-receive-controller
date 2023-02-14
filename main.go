@@ -35,7 +35,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
-	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
+	"k8s.io/kubectl/pkg/util/podutils"
 )
 
 type label = string
@@ -571,7 +571,7 @@ func (c controller) waitForPod(ctx context.Context, name string) error {
 		switch pod.Status.Phase {
 		case corev1.PodRunning:
 			if c.options.allowOnlyReadyReplicas {
-				if podutil.IsPodReady(pod) {
+				if podutils.IsPodReady(pod) {
 					return true, nil
 				}
 				return false, nil
