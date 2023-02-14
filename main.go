@@ -490,8 +490,7 @@ func (c *controller) worker(ctx context.Context) {
 	}
 }
 
-//nolint:cyclop
-// //nolint:godox TODO(pgough) - linter is complaining about complexity because 13 (this) > 10 (default)
+//nolint:godox,cyclop // TODO(pgough) - linter is complaining about complexity because 13 (this) > 10 (default)
 func (c *controller) sync(ctx context.Context) {
 	c.reconcileAttempts.Inc()
 	configMap, ok, err := c.cmapInf.GetStore().GetByKey(fmt.Sprintf("%s/%s", c.options.namespace, c.options.configMapName))
