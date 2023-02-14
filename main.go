@@ -434,16 +434,24 @@ func (c *controller) run(ctx context.Context, stop <-chan struct{}) error {
 		return err
 	}
 
-	c.cmapInf.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	_, err := c.cmapInf.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(_ interface{}) { c.queue.add() },
 		DeleteFunc: func(_ interface{}) { c.queue.add() },
 		UpdateFunc: func(_, _ interface{}) { c.queue.add() },
 	})
-	c.ssetInf.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	if err != nil {
+		return err
+	}
+
+	_, err = c.ssetInf.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(_ interface{}) { c.queue.add() },
 		DeleteFunc: func(_ interface{}) { c.queue.add() },
 		UpdateFunc: func(_, _ interface{}) { c.queue.add() },
 	})
+
+	if err != nil {
+		return err
+	}
 
 	go c.worker(ctx)
 
