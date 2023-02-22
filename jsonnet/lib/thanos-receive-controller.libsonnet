@@ -72,6 +72,11 @@ function(params) {
         verbs: ['list', 'watch', 'get', 'create', 'update'],
       },
       {
+        apiGroups: [''],
+        resources: ['pods'],
+        verbs: ['get'],
+      },
+      {
         apiGroups: ['apps'],
         resources: ['statefulsets'],
         verbs: ['list', 'watch', 'get'],

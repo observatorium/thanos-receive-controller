@@ -20,6 +20,12 @@ rules:
   - create
   - update
 - apiGroups:
+  - ""
+  resources:
+  - pods
+  verbs:
+  - get
+- apiGroups:
   - apps
   resources:
   - statefulsets
