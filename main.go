@@ -35,7 +35,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
-	podutil "k8s.io/kubernetes/pkg/api/v1/pod"
+	"k8s.io/kubectl/pkg/util/podutils"
 )
 
 type label = string
@@ -434,16 +434,24 @@ func (c *controller) run(ctx context.Context, stop <-chan struct{}) error {
 		return err
 	}
 
-	c.cmapInf.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	_, err := c.cmapInf.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(_ interface{}) { c.queue.add() },
 		DeleteFunc: func(_ interface{}) { c.queue.add() },
 		UpdateFunc: func(_, _ interface{}) { c.queue.add() },
 	})
-	c.ssetInf.AddEventHandler(cache.ResourceEventHandlerFuncs{
+	if err != nil {
+		return err
+	}
+
+	_, err = c.ssetInf.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    func(_ interface{}) { c.queue.add() },
 		DeleteFunc: func(_ interface{}) { c.queue.add() },
 		UpdateFunc: func(_, _ interface{}) { c.queue.add() },
 	})
+
+	if err != nil {
+		return err
+	}
 
 	go c.worker(ctx)
 
@@ -490,8 +498,7 @@ func (c *controller) worker(ctx context.Context) {
 	}
 }
 
-//nolint:cyclop
-// //nolint:godox TODO(pgough) - linter is complaining about complexity because 13 (this) > 10 (default)
+//nolint:godox,cyclop // TODO(pgough) - linter is complaining about complexity because 13 (this) > 10 (default)
 func (c *controller) sync(ctx context.Context) {
 	c.reconcileAttempts.Inc()
 	configMap, ok, err := c.cmapInf.GetStore().GetByKey(fmt.Sprintf("%s/%s", c.options.namespace, c.options.configMapName))
@@ -571,7 +578,7 @@ func (c controller) waitForPod(ctx context.Context, name string) error {
 		switch pod.Status.Phase {
 		case corev1.PodRunning:
 			if c.options.allowOnlyReadyReplicas {
-				if podutil.IsPodReady(pod) {
+				if podutils.IsPodReady(pod) {
 					return true, nil
 				}
 				return false, nil
