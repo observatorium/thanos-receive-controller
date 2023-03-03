@@ -555,16 +555,17 @@ func (c *controller) sync(ctx context.Context) {
 
 	c.populate(hashrings, statefulsets)
 
-	if err := c.saveHashring(ctx, hashrings, cm); err != nil {
+	err = c.saveHashring(ctx, hashrings, cm)
+	if err != nil {
 		c.reconcileErrors.WithLabelValues(save).Inc()
 		level.Error(c.logger).Log("msg", "failed to save hashrings")
 	}
 
-	// If enabled, annotate pods with config hash on change. This should
-	// update the configmap inside the pod instantaneously as well, as
+	// If enabled and hashring was succesfully changed, annotate pods with config hash on change.
+	// This should update the configmap inside the pod instantaneously as well, as
 	// opposed to having to wait kubelet sync period + cache (see
 	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#mounted-configmaps-are-updated-automatically)
-	if c.options.annotatePodsOnChange {
+	if err == nil && c.options.annotatePodsOnChange {
 		c.annotatePods(ctx, hashrings, statefulsets)
 	}
 }
@@ -699,17 +700,12 @@ func (c *controller) annotatePods(ctx context.Context, hashrings []receive.Hashr
 					level.Error(c.logger).Log("msg", "failed to get pod", "err", err)
 				}
 
-				buf, err := json.Marshal(h)
-				if err != nil {
-					level.Error(c.logger).Log("msg", "failed to marshal config", "err", err)
-				}
-
 				annotations := pod.Annotations
 				if annotations == nil {
 					annotations = make(map[string]string)
 				}
 
-				annotations["configHash"] = fmt.Sprintf("%f", hashAsMetricValue(buf))
+				annotations["annotationTimestamp"] = fmt.Sprintf("%d", time.Now().Unix())
 				pod.SetAnnotations(annotations)
 
 				_, err = c.klient.CoreV1().Pods(c.options.namespace).Update(ctx, pod, metav1.UpdateOptions{})
