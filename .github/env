@@ -1,4 +1,4 @@
-golang-version=1.17
+golang-version=1.19
 image-repository=quay.io/observatorium/thanos-receive-controller
 
 
