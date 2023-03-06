@@ -71,6 +71,7 @@ func main() {
 		Scheme                 string
 		InternalAddr           string
 		AllowOnlyReadyReplicas bool
+		AnnotatePodsOnChange   bool
 		ScaleTimeout           time.Duration
 	}{}
 
@@ -85,6 +86,7 @@ func main() {
 	flag.StringVar(&config.Scheme, "scheme", "http", "The URL scheme on which receive components accept write requests")
 	flag.StringVar(&config.InternalAddr, "internal-addr", ":8080", "The address on which internal server runs")
 	flag.BoolVar(&config.AllowOnlyReadyReplicas, "allow-only-ready-replicas", false, "Populate only Ready receiver replicas in the hashring configuration")
+	flag.BoolVar(&config.AnnotatePodsOnChange, "annotate-pods-on-change", false, "Annotates pods with latest configuration hash on a hashring change")
 	flag.DurationVar(&config.ScaleTimeout, "scale-timeout", defaultScaleTimeout, "A timeout to wait for receivers to really start after they report healthy")
 	flag.Parse()
 
@@ -128,6 +130,7 @@ func main() {
 			labelKey:               labelKey,
 			labelValue:             labelValue,
 			allowOnlyReadyReplicas: config.AllowOnlyReadyReplicas,
+			annotatePodsOnChange:   config.AnnotatePodsOnChange,
 			scaleTimeout:           config.ScaleTimeout,
 		}
 		c := newController(klient, logger, opt)
@@ -310,6 +313,7 @@ type options struct {
 	labelKey               string
 	labelValue             string
 	allowOnlyReadyReplicas bool
+	annotatePodsOnChange   bool
 	scaleTimeout           time.Duration
 }
 
@@ -498,7 +502,6 @@ func (c *controller) worker(ctx context.Context) {
 	}
 }
 
-//nolint:godox,cyclop // TODO(pgough) - linter is complaining about complexity because 13 (this) > 10 (default)
 func (c *controller) sync(ctx context.Context) {
 	c.reconcileAttempts.Inc()
 	configMap, ok, err := c.cmapInf.GetStore().GetByKey(fmt.Sprintf("%s/%s", c.options.namespace, c.options.configMapName))
@@ -560,9 +563,18 @@ func (c *controller) sync(ctx context.Context) {
 
 	c.populate(hashrings, statefulsets)
 
-	if err := c.saveHashring(ctx, hashrings, cm); err != nil {
+	err = c.saveHashring(ctx, hashrings, cm)
+	if err != nil {
 		c.reconcileErrors.WithLabelValues(save).Inc()
 		level.Error(c.logger).Log("msg", "failed to save hashrings")
+	}
+
+	// If enabled and hashring was successfully changed, annotate pods with config hash on change.
+	// This should update the configmap inside the pod instantaneously as well, as
+	// opposed to having to wait kubelet sync period + cache (see
+	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#mounted-configmaps-are-updated-automatically)
+	if err == nil && c.options.annotatePodsOnChange {
+		c.annotatePods(ctx, hashrings, statefulsets)
 	}
 }
 
@@ -683,6 +695,34 @@ func (c *controller) saveHashring(ctx context.Context, hashring []receive.Hashri
 	c.configmapLastSuccessfulChangeTime.Set(float64(time.Now().Unix()))
 
 	return nil
+}
+
+func (c *controller) annotatePods(ctx context.Context, hashrings []receive.HashringConfig, statefulsets map[string]*appsv1.StatefulSet) {
+	for _, h := range hashrings {
+		if sts, exists := statefulsets[h.Hashring]; exists {
+			for i := 0; i < int(*sts.Spec.Replicas); i++ {
+				podName := fmt.Sprintf("%s-%d", sts.Name, i)
+
+				pod, err := c.klient.CoreV1().Pods(c.options.namespace).Get(ctx, podName, metav1.GetOptions{})
+				if err != nil {
+					level.Error(c.logger).Log("msg", "failed to get pod", "err", err)
+				}
+
+				annotations := pod.Annotations
+				if annotations == nil {
+					annotations = make(map[string]string)
+				}
+
+				annotations["annotationTimestamp"] = fmt.Sprintf("%d", time.Now().Unix())
+				pod.SetAnnotations(annotations)
+
+				_, err = c.klient.CoreV1().Pods(c.options.namespace).Update(ctx, pod, metav1.UpdateOptions{})
+				if err != nil {
+					level.Error(c.logger).Log("msg", "failed to update pod", "err", err)
+				}
+			}
+		}
+	}
 }
 
 // hashAsMetricValue generates metric value from hash of data.

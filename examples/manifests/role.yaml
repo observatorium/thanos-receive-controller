@@ -25,6 +25,7 @@ rules:
   - pods
   verbs:
   - get
+  - update
 - apiGroups:
   - apps
   resources:

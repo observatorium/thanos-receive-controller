@@ -12,6 +12,7 @@ local defaults = {
   hashrings: error 'must provide hashring configuration',
   resources: {},
   serviceMonitor: false,
+  annotatePodsOnChange: false,
   ports: { http: 8080 },
   clusterDomain: '',
 
@@ -74,7 +75,7 @@ function(params) {
       {
         apiGroups: [''],
         resources: ['pods'],
-        verbs: ['get'],
+        verbs: ['get', 'update'],
       },
       {
         apiGroups: ['apps'],
@@ -154,6 +155,11 @@ function(params) {
             (
               if std.length(trc.config.clusterDomain) > 0 then [
                 '--cluster-domain=%s' % trc.config.clusterDomain,
+              ] else []
+            ) +
+            (
+              if trc.config.annotatePodsOnChange == true then [
+                '--annotate-pods-on-change',
               ] else []
             ),
       env: [
