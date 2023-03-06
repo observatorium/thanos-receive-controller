@@ -569,7 +569,7 @@ func (c *controller) sync(ctx context.Context) {
 		level.Error(c.logger).Log("msg", "failed to save hashrings")
 	}
 
-	// If enabled and hashring was succesfully changed, annotate pods with config hash on change.
+	// If enabled and hashring was successfully changed, annotate pods with config hash on change.
 	// This should update the configmap inside the pod instantaneously as well, as
 	// opposed to having to wait kubelet sync period + cache (see
 	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#mounted-configmaps-are-updated-automatically)
