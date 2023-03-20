@@ -14,6 +14,7 @@ local defaults = {
   serviceMonitor: false,
   annotatePodsOnChange: false,
   allowOnlyReadyReplicas: false,
+  allowDynamicScaling: false,
   ports: { http: 8080 },
   clusterDomain: '',
 
@@ -166,6 +167,11 @@ function(params) {
             (
               if trc.config.allowOnlyReadyReplicas == true then [
                 '--allow-only-ready-replicas',
+              ] else []
+            ) +
+            (
+              if trc.config.allowDynamicScaling == true then [
+                '--allow-dynamic-scaling',
               ] else []
             ),
       env: [
