@@ -13,6 +13,7 @@ local defaults = {
   resources: {},
   serviceMonitor: false,
   annotatePodsOnChange: false,
+  allowOnlyReadyReplicas: false,
   ports: { http: 8080 },
   clusterDomain: '',
 
@@ -160,6 +161,11 @@ function(params) {
             (
               if trc.config.annotatePodsOnChange == true then [
                 '--annotate-pods-on-change',
+              ] else []
+            ) +
+            (
+              if trc.config.allowOnlyReadyReplicas == true then [
+                '--allow-only-ready-replicas',
               ] else []
             ),
       env: [
