@@ -71,6 +71,7 @@ func main() {
 		Scheme                 string
 		InternalAddr           string
 		AllowOnlyReadyReplicas bool
+		AllowDynamicScaling    bool
 		AnnotatePodsOnChange   bool
 		ScaleTimeout           time.Duration
 	}{}
@@ -86,6 +87,7 @@ func main() {
 	flag.StringVar(&config.Scheme, "scheme", "http", "The URL scheme on which receive components accept write requests")
 	flag.StringVar(&config.InternalAddr, "internal-addr", ":8080", "The address on which internal server runs")
 	flag.BoolVar(&config.AllowOnlyReadyReplicas, "allow-only-ready-replicas", false, "Populate only Ready receiver replicas in the hashring configuration")
+	flag.BoolVar(&config.AllowDynamicScaling, "allow-dynamic-scaling", false, "Update the hashring configuration on scale down events.")
 	flag.BoolVar(&config.AnnotatePodsOnChange, "annotate-pods-on-change", false, "Annotates pods with latest configuration hash on a hashring change")
 	flag.DurationVar(&config.ScaleTimeout, "scale-timeout", defaultScaleTimeout, "A timeout to wait for receivers to really start after they report healthy")
 	flag.Parse()
@@ -313,6 +315,7 @@ type options struct {
 	labelKey               string
 	labelValue             string
 	allowOnlyReadyReplicas bool
+	allowDynamicScaling    bool
 	annotatePodsOnChange   bool
 	scaleTimeout           time.Duration
 }
@@ -561,7 +564,7 @@ func (c *controller) sync(ctx context.Context) {
 		time.Sleep(c.options.scaleTimeout) // Give some time for all replicas before they receive hundreds req/s
 	}
 
-	c.populate(hashrings, statefulsets)
+	c.populate(ctx, hashrings, statefulsets)
 
 	err = c.saveHashring(ctx, hashrings, cm)
 	if err != nil {
@@ -604,35 +607,55 @@ func (c controller) waitForPod(ctx context.Context, name string) error {
 	})
 }
 
-//nolint:nestif
-func (c *controller) populate(hashrings []receive.HashringConfig, statefulsets map[string]*appsv1.StatefulSet) {
+func (c *controller) populate(ctx context.Context, hashrings []receive.HashringConfig, statefulsets map[string]*appsv1.StatefulSet) {
 	for i, h := range hashrings {
-		if sts, exists := statefulsets[h.Hashring]; exists {
-			var endpoints []string
+		sts, exists := statefulsets[h.Hashring]
+		if !exists {
+			continue
+		}
 
-			for i := 0; i < int(*sts.Spec.Replicas); i++ {
-				// If cluster domain is empty string we don't want dot after svc.
-				clusterDomain := ""
-				if c.options.clusterDomain != "" {
-					clusterDomain = fmt.Sprintf(".%s", c.options.clusterDomain)
+		var endpoints []string
+
+		for i := 0; i < int(*sts.Spec.Replicas); i++ {
+			if c.options.allowDynamicScaling {
+				podName := fmt.Sprintf("%s-%d", sts.Name, i)
+
+				pod, err := c.klient.CoreV1().Pods(c.options.namespace).Get(ctx, podName, metav1.GetOptions{})
+				if kerrors.IsNotFound(err) {
+					continue
+				}
+				// Do not add a replica to the hashring if pod is not Ready.
+				if !podutils.IsPodReady(pod) {
+					level.Warn(c.logger).Log("msg", "failed adding pod to hashring, pod not ready", "pod", podName, "err", err)
+					continue
 				}
 
-				endpoints = append(endpoints,
-					fmt.Sprintf("%s-%d.%s.%s.svc%s:%d",
-						sts.Name,
-						i,
-						sts.Spec.ServiceName,
-						c.options.namespace,
-						clusterDomain,
-						c.options.port,
-					),
-				)
+				if pod.ObjectMeta.DeletionTimestamp != nil && (pod.Status.Phase == corev1.PodRunning || pod.Status.Phase == corev1.PodPending) {
+					// Pod is terminating, do not add it to the hashring.
+					continue
+				}
+			}
+			// If cluster domain is empty string we don't want dot after svc.
+			clusterDomain := ""
+			if c.options.clusterDomain != "" {
+				clusterDomain = fmt.Sprintf(".%s", c.options.clusterDomain)
 			}
 
-			hashrings[i].Endpoints = endpoints
-			c.hashringNodes.WithLabelValues(h.Hashring).Set(float64(len(endpoints)))
-			c.hashringTenants.WithLabelValues(h.Hashring).Set(float64(len(h.Tenants)))
+			endpoints = append(endpoints,
+				fmt.Sprintf("%s-%d.%s.%s.svc%s:%d",
+					sts.Name,
+					i,
+					sts.Spec.ServiceName,
+					c.options.namespace,
+					clusterDomain,
+					c.options.port,
+				),
+			)
 		}
+
+		hashrings[i].Endpoints = endpoints
+		c.hashringNodes.WithLabelValues(h.Hashring).Set(float64(len(endpoints)))
+		c.hashringTenants.WithLabelValues(h.Hashring).Set(float64(len(h.Tenants)))
 	}
 }
 
