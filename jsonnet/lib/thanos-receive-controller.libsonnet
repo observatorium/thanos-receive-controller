@@ -72,7 +72,7 @@ function(params) {
       {
         apiGroups: [''],
         resources: ['configmaps'],
-        verbs: ['list', 'watch', 'get', 'create', 'update'],
+        verbs: ['list', 'watch', 'get', 'create', 'update', 'delete'],
       },
       {
         apiGroups: [''],
