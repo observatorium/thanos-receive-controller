@@ -569,7 +569,7 @@ func (c *controller) sync(ctx context.Context) {
 	err = c.saveHashring(ctx, hashrings, cm)
 	if err != nil {
 		c.reconcileErrors.WithLabelValues(save).Inc()
-		level.Error(c.logger).Log("msg", "failed to save hashrings")
+		level.Error(c.logger).Log("msg", "failed to save hashrings", "err", err)
 	}
 
 	// If enabled and hashring was successfully changed, annotate pods with config hash on change.
