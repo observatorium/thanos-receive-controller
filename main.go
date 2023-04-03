@@ -133,6 +133,7 @@ func main() {
 			labelValue:             labelValue,
 			allowOnlyReadyReplicas: config.AllowOnlyReadyReplicas,
 			annotatePodsOnChange:   config.AnnotatePodsOnChange,
+			allowDynamicScaling:    config.AllowDynamicScaling,
 			scaleTimeout:           config.ScaleTimeout,
 		}
 		c := newController(klient, logger, opt)
