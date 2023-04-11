@@ -81,9 +81,9 @@ This means:
 
 
 ## About the `--allow-dynamic-scaling` flag
-By default, the controller does not react to voluntary/involuntary distributions to receiver replicas in the StatefulSet.
+By default, the controller does not react to voluntary/involuntary disruptions to receiver replicas in the StatefulSet.
 This flag allows the user to enable this behavior.
-When enabled, the controller will react to voluntary/involuntary distributions to receiver replicas in the StatefulSet.
+When enabled, the controller will react to voluntary/involuntary disruptions to receiver replicas in the StatefulSet.
 When a Pod is marked for termination, the controller will remove it from the hashring and the replica essentially becomes a "router" for the hashring.
 When a Pod is deleted, the controller will remove it from the hashring.
 When a Pod becomes unready, the controller will remove it from the hashring.
