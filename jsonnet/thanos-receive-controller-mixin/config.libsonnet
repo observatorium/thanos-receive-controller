@@ -18,5 +18,6 @@
     tags: ['thanos-receive-controller-mixin', 'observatorium'],
     selector: ['%s="$%s"' % [level, level] for level in std.objectFields(thanos.hierarcies)],
     aggregator: ['%s' % level for level in std.objectFields(thanos.hierarcies)],
+    instance_name_filter: '',
   },
 }

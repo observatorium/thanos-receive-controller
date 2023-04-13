@@ -28,7 +28,12 @@
       ],
 
       templating+: {
-        list+: [
+        list: [
+          if variable.name == 'datasource'
+          then variable { regex: thanos.dashboard.instance_name_filter }
+          else variable
+          for variable in super.list
+        ] + [
           template.interval(
             'interval',
             '5m,10m,30m,1h,6h,12h,auto',
