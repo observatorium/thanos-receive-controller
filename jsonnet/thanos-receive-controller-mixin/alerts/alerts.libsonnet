@@ -2,11 +2,11 @@
   local thanos = self,
   receiveController+:: {
     selector: error 'must provide selector for Thanos Receive Controller alerting rules',
-    aggregator: std.join(', ', std.objectFields(thanos.hierarcies) + ['job']),
+    aggregator: std.join(', ', std.objectFields(thanos.hierarchies) + ['job']),
   },
 
   prometheusAlerts+:: {
-    local location = if std.length(std.objectFields(thanos.hierarcies)) > 0 then ' from ' + std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.hierarcies)]) else '',
+    local location = if std.length(std.objectFields(thanos.hierarchies)) > 0 then ' from ' + std.join('/', ['{{$labels.%s}}' % level for level in std.objectFields(thanos.hierarchies)]) else '',
     groups+: [
       {
         name: 'thanos-receive-controller',
@@ -69,7 +69,7 @@
               / on (%(on)s) group_left
                 thanos_receive_controller_configmap_hash{%(selector)s} != 1
               )
-            ||| % thanos.receiveController { on: std.join(', ', std.objectFields(thanos.hierarcies)) },
+            ||| % thanos.receiveController { on: std.join(', ', std.objectFields(thanos.hierarchies)) },
             'for': '5m',
             labels: {
               severity: 'critical',
