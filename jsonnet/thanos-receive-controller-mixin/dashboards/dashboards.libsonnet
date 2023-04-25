@@ -145,12 +145,12 @@ local g = (import 'grafana-builder/grafana.libsonnet');
             template.new(
               level,
               '$datasource',
-              'label_values(%s, %s)' % [thanos.hierarcies[level], level],
+              'label_values(%s, %s)' % [thanos.hierarchies[level], level],
               label=level,
               refresh=1,
               sort=2,
             )
-            for level in std.objectFields(thanos.hierarcies)
+            for level in std.objectFields(thanos.hierarchies)
           ] + [
             template.new(
               'job',
