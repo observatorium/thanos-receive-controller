@@ -3,3 +3,4 @@
 vendor
 jsonnetfile.lock.json
 tmp
+.buildxcache
