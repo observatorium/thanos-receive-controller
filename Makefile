@@ -94,7 +94,7 @@ clean:
 
 .PHONY: container-build
 container-build:
-	# git update-index --refresh
+	git update-index --refresh
 	docker buildx build \
 		--platform linux/amd64,linux/arm64 \
 		--cache-to type=local,dest=./.buildxcache/ \
