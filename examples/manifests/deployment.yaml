@@ -44,4 +44,4 @@ spec:
       securityContext:
         fsGroup: 65534
         runAsUser: 65534
-      serviceAccount: thanos-receive-controller
+      serviceAccountName: thanos-receive-controller

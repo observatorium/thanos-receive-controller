@@ -202,7 +202,7 @@ function(params) {
           spec: {
             containers: [c],
             securityContext: trc.config.securityContext,
-            serviceAccount: trc.serviceAccount.metadata.name,
+            serviceAccountName: trc.serviceAccount.metadata.name,
           },
         },
       },
