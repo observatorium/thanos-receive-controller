@@ -578,7 +578,7 @@ func (c *controller) sync(ctx context.Context) {
 	// opposed to having to wait kubelet sync period + cache (see
 	// https://kubernetes.io/docs/tasks/configure-pod-container/configure-pod-configmap/#mounted-configmaps-are-updated-automatically)
 	if err == nil && c.options.annotatePodsOnChange {
-		c.annotatePods(ctx, hashrings, statefulsets)
+		c.annotatePods(ctx)
 	}
 }
 
@@ -721,32 +721,34 @@ func (c *controller) saveHashring(ctx context.Context, hashring []receive.Hashri
 	return nil
 }
 
-func (c *controller) annotatePods(ctx context.Context, hashrings []receive.HashringConfig, statefulsets map[string]*appsv1.StatefulSet) {
-	for _, h := range hashrings {
-		if sts, exists := statefulsets[h.Hashring]; exists {
-			for i := 0; i < int(*sts.Spec.Replicas); i++ {
-				podName := fmt.Sprintf("%s-%d", sts.Name, i)
+func (c *controller) annotatePods(ctx context.Context) {
+	annotationKey := fmt.Sprintf("%s/%s", c.options.labelKey, "lastControllerUpdate")
 
-				pod, err := c.klient.CoreV1().Pods(c.options.namespace).Get(ctx, podName, metav1.GetOptions{})
-				if err != nil {
-					level.Error(c.logger).Log("msg", "failed to get pod", "err", err)
-				}
+	// Select pods that have a statefulSetLabel matching ours.
+	podList, err := c.klient.CoreV1().Pods(c.options.namespace).List(ctx,
+		metav1.ListOptions{
+			LabelSelector: fmt.Sprintf("%s=%s", c.options.labelKey, c.options.labelValue),
+		})
+	if err != nil {
+		level.Error(c.logger).Log("msg", "failed to list pods belonging to controller", "err", err)
+	} else {
+		for _, pod := range podList.Items {
+			podObj := pod.DeepCopy()
 
-				annotations := pod.Annotations
-				if annotations == nil {
-					annotations = make(map[string]string)
-				}
-
-				annotations["annotationTimestamp"] = fmt.Sprintf("%d", time.Now().Unix())
-				pod.SetAnnotations(annotations)
-
-				_, err = c.klient.CoreV1().Pods(c.options.namespace).Update(ctx, pod, metav1.UpdateOptions{})
-				if err != nil {
-					level.Error(c.logger).Log("msg", "failed to update pod", "err", err)
-				}
+			annotations := podObj.ObjectMeta.Annotations
+			if annotations == nil {
+				annotations = make(map[string]string)
 			}
-		}
-	}
+
+			annotations[annotationKey] = fmt.Sprintf("%d", time.Now().Unix())
+			podObj.SetAnnotations(annotations)
+
+			_, err := c.klient.CoreV1().Pods(pod.Namespace).Update(ctx, podObj, metav1.UpdateOptions{})
+			if err != nil {
+				level.Error(c.logger).Log("msg", "failed to update pod", "err", err)
+			}
+		} // for range podList
+	} // if err
 }
 
 // hashAsMetricValue generates metric value from hash of data.
