@@ -49,8 +49,7 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "rate",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
                "thresholds": [ ],
@@ -125,8 +124,7 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{type}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
                "thresholds": [ ],
@@ -213,8 +211,7 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "rate",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
                "thresholds": [ ],
@@ -289,8 +286,7 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "{{type}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
                "thresholds": [ ],
@@ -377,8 +373,7 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "all",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
                "thresholds": [ ],
@@ -543,16 +538,14 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "receive controller {{name}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   },
                   {
                      "expr": "avg by (namespace, job, name) (thanos_receive_hashring_nodes{job=~\"thanos-receive-default.*\"})",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "receive {{name}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
                "thresholds": [ ],
@@ -627,16 +620,14 @@
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "receive controller {{name}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   },
                   {
                      "expr": "avg by (namespace, job, name) (thanos_receive_hashring_tenants{job=~\"thanos-receive-default.*\"})",
                      "format": "time_series",
                      "intervalFactor": 2,
                      "legendFormat": "receive {{name}}",
-                     "legendLink": null,
-                     "step": 10
+                     "legendLink": null
                   }
                ],
                "thresholds": [ ],
