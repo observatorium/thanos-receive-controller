@@ -63,6 +63,7 @@ func main() {
 		KubeConfig             string
 		Namespace              string
 		StatefulSetLabel       string
+		Label                  string
 		ClusterDomain          string
 		ConfigMapName          string
 		ConfigMapGeneratedName string
@@ -78,7 +79,8 @@ func main() {
 
 	flag.StringVar(&config.KubeConfig, "kubeconfig", "", "Path to kubeconfig")
 	flag.StringVar(&config.Namespace, "namespace", "default", "The namespace to watch")
-	flag.StringVar(&config.StatefulSetLabel, "statefulset-label", "controller.receive.thanos.io=thanos-receive-controller", "The label StatefulSets must have to be watched by the controller")
+	flag.StringVar(&config.StatefulSetLabel, "statefulset-label", "", "[DEPRECATED] The label StatefulSets must have to be watched by the controller")
+	flag.StringVar(&config.Label, "label", "controller.receive.thanos.io=thanos-receive-controller", "The label workloads must have to be watched by the controller.")
 	flag.StringVar(&config.ClusterDomain, "cluster-domain", "cluster.local", "The DNS domain of the cluster")
 	flag.StringVar(&config.ConfigMapName, "configmap-name", "", "The name of the original ConfigMap containing the hashring tenant configuration")
 	flag.StringVar(&config.ConfigMapGeneratedName, "configmap-generated-name", "", "The name of the generated and populated ConfigMap")
@@ -88,7 +90,7 @@ func main() {
 	flag.StringVar(&config.InternalAddr, "internal-addr", ":8080", "The address on which internal server runs")
 	flag.BoolVar(&config.AllowOnlyReadyReplicas, "allow-only-ready-replicas", false, "Populate only Ready receiver replicas in the hashring configuration")
 	flag.BoolVar(&config.AllowDynamicScaling, "allow-dynamic-scaling", false, "Update the hashring configuration on scale down events.")
-	flag.BoolVar(&config.AnnotatePodsOnChange, "annotate-pods-on-change", false, "Annotates pods with latest configuration hash on a hashring change")
+	flag.BoolVar(&config.AnnotatePodsOnChange, "annotate-pods-on-change", false, "Annotates pods with current timestamp on a hashring change")
 	flag.DurationVar(&config.ScaleTimeout, "scale-timeout", defaultScaleTimeout, "A timeout to wait for receivers to really start after they report healthy")
 	flag.Parse()
 
@@ -96,7 +98,15 @@ func main() {
 	logger = log.WithPrefix(logger, "ts", log.DefaultTimestampUTC)
 	logger = log.WithPrefix(logger, "caller", log.DefaultCaller)
 
-	labelKey, labelValue := splitLabel(config.StatefulSetLabel)
+	var controllerLabel string
+	if len(config.StatefulSetLabel) > 0 {
+		level.Warn(logger).Log("msg", "The --statefulset-label flag is deprecated. Please see the manual page for updates.")
+		controllerLabel = config.StatefulSetLabel
+	} else {
+		controllerLabel = config.Label
+	}
+
+	labelKey, labelValue := splitLabel(controllerLabel)
 
 	konfig, err := clientcmd.BuildConfigFromFlags("", config.KubeConfig)
 	if err != nil {
@@ -267,7 +277,7 @@ const labelParts = 2
 func splitLabel(in string) (key, value string) {
 	parts := strings.Split(in, "=")
 	if len(parts) != labelParts {
-		stdlog.Fatal("--statefulset-label must be of the form 'key=value'")
+		stdlog.Fatal("Labels consist of a key-value pair f.ex: 'key=value'")
 	}
 
 	return parts[0], parts[1]
@@ -724,7 +734,7 @@ func (c *controller) saveHashring(ctx context.Context, hashring []receive.Hashri
 func (c *controller) annotatePods(ctx context.Context) {
 	annotationKey := fmt.Sprintf("%s/%s", c.options.labelKey, "lastControllerUpdate")
 
-	// Select pods that have a statefulSetLabel matching ours.
+	// Select pods that have a controllerLabel matching ours.
 	podList, err := c.klient.CoreV1().Pods(c.options.namespace).List(ctx,
 		metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s=%s", c.options.labelKey, c.options.labelValue),
