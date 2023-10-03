@@ -77,7 +77,6 @@ type CmdConfig struct {
 }
 
 func parseFlags() CmdConfig {
-
 	var config CmdConfig
 
 	flag.StringVar(&config.KubeConfig, "kubeconfig", "", "Path to kubeconfig")
