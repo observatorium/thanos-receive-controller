@@ -58,24 +58,27 @@ const (
 	other  label = "other"
 )
 
-func main() {
-	config := struct {
-		KubeConfig             string
-		Namespace              string
-		StatefulSetLabel       string
-		Label                  string
-		ClusterDomain          string
-		ConfigMapName          string
-		ConfigMapGeneratedName string
-		FileName               string
-		Port                   int
-		Scheme                 string
-		InternalAddr           string
-		AllowOnlyReadyReplicas bool
-		AllowDynamicScaling    bool
-		AnnotatePodsOnChange   bool
-		ScaleTimeout           time.Duration
-	}{}
+type CmdConfig struct {
+	KubeConfig             string
+	Namespace              string
+	StatefulSetLabel       string
+	Label                  string
+	ClusterDomain          string
+	ConfigMapName          string
+	ConfigMapGeneratedName string
+	FileName               string
+	Port                   int
+	Scheme                 string
+	InternalAddr           string
+	AllowOnlyReadyReplicas bool
+	AllowDynamicScaling    bool
+	AnnotatePodsOnChange   bool
+	ScaleTimeout           time.Duration
+}
+
+func parseFlags() CmdConfig {
+
+	var config CmdConfig
 
 	flag.StringVar(&config.KubeConfig, "kubeconfig", "", "Path to kubeconfig")
 	flag.StringVar(&config.Namespace, "namespace", "default", "The namespace to watch")
@@ -94,19 +97,26 @@ func main() {
 	flag.DurationVar(&config.ScaleTimeout, "scale-timeout", defaultScaleTimeout, "A timeout to wait for receivers to really start after they report healthy")
 	flag.Parse()
 
+	return config
+}
+
+func main() {
 	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
 	logger = log.WithPrefix(logger, "ts", log.DefaultTimestampUTC)
 	logger = log.WithPrefix(logger, "caller", log.DefaultCaller)
 
-	var controllerLabel string
+	config := parseFlags()
+
+	var tmpControllerLabel string
 	if len(config.StatefulSetLabel) > 0 {
+		tmpControllerLabel = config.StatefulSetLabel
+
 		level.Warn(logger).Log("msg", "The --statefulset-label flag is deprecated. Please see the manual page for updates.")
-		controllerLabel = config.StatefulSetLabel
 	} else {
-		controllerLabel = config.Label
+		tmpControllerLabel = config.Label
 	}
 
-	labelKey, labelValue := splitLabel(controllerLabel)
+	labelKey, labelValue := splitLabel(tmpControllerLabel)
 
 	konfig, err := clientcmd.BuildConfigFromFlags("", config.KubeConfig)
 	if err != nil {
