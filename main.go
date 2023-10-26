@@ -742,6 +742,7 @@ func (c *controller) saveHashring(ctx context.Context, hashring []receive.Hashri
 
 func (c *controller) annotatePods(ctx context.Context) {
 	annotationKey := fmt.Sprintf("%s/%s", c.options.labelKey, "lastControllerUpdate")
+	updateTime := fmt.Sprintf("%d", time.Now().Unix())
 
 	// Select pods that have a controllerLabel matching ours.
 	podList, err := c.klient.CoreV1().Pods(c.options.namespace).List(ctx,
@@ -761,14 +762,14 @@ func (c *controller) annotatePods(ctx context.Context) {
 			annotations = make(map[string]string)
 		}
 
-		annotations[annotationKey] = fmt.Sprintf("%d", time.Now().Unix())
+		annotations[annotationKey] = updateTime
 		podObj.SetAnnotations(annotations)
 
 		_, err := c.klient.CoreV1().Pods(pod.Namespace).Update(ctx, podObj, metav1.UpdateOptions{})
 		if err != nil {
 			level.Error(c.logger).Log("msg", "failed to update pod", "err", err)
 		}
-	} // for range podList
+	}
 }
 
 // hashAsMetricValue generates metric value from hash of data.
