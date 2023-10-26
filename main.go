@@ -750,24 +750,25 @@ func (c *controller) annotatePods(ctx context.Context) {
 		})
 	if err != nil {
 		level.Error(c.logger).Log("msg", "failed to list pods belonging to controller", "err", err)
-	} else {
-		for _, pod := range podList.Items {
-			podObj := pod.DeepCopy()
+		return
+	}
 
-			annotations := podObj.ObjectMeta.Annotations
-			if annotations == nil {
-				annotations = make(map[string]string)
-			}
+	for _, pod := range podList.Items {
+		podObj := pod.DeepCopy()
 
-			annotations[annotationKey] = fmt.Sprintf("%d", time.Now().Unix())
-			podObj.SetAnnotations(annotations)
+		annotations := podObj.ObjectMeta.Annotations
+		if annotations == nil {
+			annotations = make(map[string]string)
+		}
 
-			_, err := c.klient.CoreV1().Pods(pod.Namespace).Update(ctx, podObj, metav1.UpdateOptions{})
-			if err != nil {
-				level.Error(c.logger).Log("msg", "failed to update pod", "err", err)
-			}
-		} // for range podList
-	} // if err
+		annotations[annotationKey] = fmt.Sprintf("%d", time.Now().Unix())
+		podObj.SetAnnotations(annotations)
+
+		_, err := c.klient.CoreV1().Pods(pod.Namespace).Update(ctx, podObj, metav1.UpdateOptions{})
+		if err != nil {
+			level.Error(c.logger).Log("msg", "failed to update pod", "err", err)
+		}
+	} // for range podList
 }
 
 // hashAsMetricValue generates metric value from hash of data.
