@@ -588,10 +588,9 @@ func (c *controller) sync(ctx context.Context) {
 
 		c.replicas[hashring] = *sts.Spec.Replicas
 		if _, ok := statefulsets[hashring]; !ok {
-			// If not, initialize a new slice
 			statefulsets[hashring] = []*appsv1.StatefulSet{}
 		}
-		// Append the new value to the slice associated with the key
+		// Append the new value to the slice associated with the hashring key
 		statefulsets[hashring] = append(statefulsets[hashring], sts.DeepCopy())
 		level.Info(c.logger).Log("Hashring ", hashring, " got a statefulset: ", sts.Name)
 
@@ -826,8 +825,8 @@ func newQueue() *queue {
 }
 
 func (q *queue) add() {
-	q.Mutex.Lock()
-	defer q.Mutex.Unlock()
+	q.Lock()
+	defer q.Unlock()
 
 	if !q.ok {
 		return
@@ -839,8 +838,8 @@ func (q *queue) add() {
 }
 
 func (q *queue) stop() {
-	q.Mutex.Lock()
-	defer q.Mutex.Unlock()
+	q.Lock()
+	defer q.Unlock()
 
 	if !q.ok {
 		return
@@ -852,8 +851,8 @@ func (q *queue) stop() {
 
 func (q *queue) get() bool {
 	<-q.ch
-	q.Mutex.Lock()
-	defer q.Mutex.Unlock()
+	q.Lock()
+	defer q.Unlock()
 
 	return q.ok
 }

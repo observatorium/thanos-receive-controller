@@ -441,6 +441,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 	}
 }
 
+// nolint:funlen
 func TestControllerWithAzAware(t *testing.T) {
 	ctx := context.Background()
 	port := 10901
