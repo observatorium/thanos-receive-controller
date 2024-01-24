@@ -21,7 +21,7 @@ func intPointer(i int32) *int32 {
 	return &i
 }
 
-// nolint:funlen
+// nolint:funlen, maintidx
 func TestController(t *testing.T) {
 	ctx := context.Background()
 	port := 10901
@@ -234,17 +234,18 @@ func TestController(t *testing.T) {
 				},
 			},
 			clusterDomain: "cluster.local",
-			expected: []receive.HashringConfig{{
-				Hashring: "hashring0",
-				Tenants:  []string{"foo", "bar"},
-				Endpoints: []receive.Endpoint{
-					{Address: "hashring0-0.h0.namespace.svc.cluster.local:10901"},
-					{Address: "hashring0-1.h0.namespace.svc.cluster.local:10901"},
-					{Address: "hashring0-2.h0.namespace.svc.cluster.local:10901"},
-					{Address: "hashring1-0.h0.namespace.svc.cluster.local:10901"},
-					{Address: "hashring1-1.h0.namespace.svc.cluster.local:10901"},
+			expected: []receive.HashringConfig{
+				{
+					Hashring: "hashring0",
+					Tenants:  []string{"foo", "bar"},
+					Endpoints: []receive.Endpoint{
+						{Address: "hashring0-0.h0.namespace.svc.cluster.local:10901"},
+						{Address: "hashring0-1.h0.namespace.svc.cluster.local:10901"},
+						{Address: "hashring0-2.h0.namespace.svc.cluster.local:10901"},
+						{Address: "hashring1-0.h0.namespace.svc.cluster.local:10901"},
+						{Address: "hashring1-1.h0.namespace.svc.cluster.local:10901"},
+					},
 				},
-			},
 			},
 		},
 		{
@@ -441,7 +442,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 	}
 }
 
-// nolint:funlen
+// nolint:funlen, maintidx
 func TestControllerWithAzAware(t *testing.T) {
 	ctx := context.Background()
 	port := 10901
@@ -687,32 +688,33 @@ func TestControllerWithAzAware(t *testing.T) {
 				},
 			},
 			clusterDomain: "cluster.local",
-			expected: []receive.HashringConfig{{
-				Hashring: "hashring0",
-				Tenants:  []string{"foo", "bar"},
-				Endpoints: []receive.Endpoint{
-					{
-						Address: "hashring0-0.h0.namespace.svc.cluster.local:10901",
-						AZ:      "hashring0",
-					},
-					{
-						Address: "hashring0-1.h0.namespace.svc.cluster.local:10901",
-						AZ:      "hashring0",
-					},
-					{
-						Address: "hashring0-2.h0.namespace.svc.cluster.local:10901",
-						AZ:      "hashring0",
-					},
-					{
-						Address: "hashring1-0.h0.namespace.svc.cluster.local:10901",
-						AZ:      "hashring1",
-					},
-					{
-						Address: "hashring1-1.h0.namespace.svc.cluster.local:10901",
-						AZ:      "hashring1",
+			expected: []receive.HashringConfig{
+				{
+					Hashring: "hashring0",
+					Tenants:  []string{"foo", "bar"},
+					Endpoints: []receive.Endpoint{
+						{
+							Address: "hashring0-0.h0.namespace.svc.cluster.local:10901",
+							AZ:      "hashring0",
+						},
+						{
+							Address: "hashring0-1.h0.namespace.svc.cluster.local:10901",
+							AZ:      "hashring0",
+						},
+						{
+							Address: "hashring0-2.h0.namespace.svc.cluster.local:10901",
+							AZ:      "hashring0",
+						},
+						{
+							Address: "hashring1-0.h0.namespace.svc.cluster.local:10901",
+							AZ:      "hashring1",
+						},
+						{
+							Address: "hashring1-1.h0.namespace.svc.cluster.local:10901",
+							AZ:      "hashring1",
+						},
 					},
 				},
-			},
 			},
 		},
 		{
@@ -800,6 +802,7 @@ func TestControllerWithAzAware(t *testing.T) {
 		})
 	}
 }
+
 func TestControllerConfigmapUpdateWithAzAware(t *testing.T) {
 	ctx := context.Background()
 	port := 10901
@@ -927,6 +930,7 @@ func TestControllerConfigmapUpdateWithAzAware(t *testing.T) {
 		})
 	}
 }
+
 func setupController(ctx context.Context, t *testing.T, klient kubernetes.Interface, opts *options) func() {
 	t.Helper()
 

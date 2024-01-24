@@ -289,7 +289,7 @@ func newReflectorMetrics(reg *prometheus.Registry) prometheusReflectorMetrics {
 
 const labelParts = 2
 
-func splitLabel(in string) (key, value string) {
+func splitLabel(in string) (string, string) {
 	parts := strings.Split(in, "=")
 	if len(parts) != labelParts {
 		stdlog.Fatal("Labels consist of a key-value pair f.ex: 'key=value'")
@@ -298,35 +298,35 @@ func splitLabel(in string) (key, value string) {
 	return parts[0], parts[1]
 }
 
-func (p prometheusReflectorMetrics) NewListsMetric(name string) cache.CounterMetric {
+func (p prometheusReflectorMetrics) NewListsMetric(_ string) cache.CounterMetric {
 	return p.listsMetric
 }
 
-func (p prometheusReflectorMetrics) NewListDurationMetric(name string) cache.SummaryMetric {
+func (p prometheusReflectorMetrics) NewListDurationMetric(_ string) cache.SummaryMetric {
 	return p.listDurationMetric
 }
 
-func (p prometheusReflectorMetrics) NewItemsInListMetric(name string) cache.SummaryMetric {
+func (p prometheusReflectorMetrics) NewItemsInListMetric(_ string) cache.SummaryMetric {
 	return p.itemsInListMetric
 }
 
-func (p prometheusReflectorMetrics) NewWatchesMetric(name string) cache.CounterMetric {
+func (p prometheusReflectorMetrics) NewWatchesMetric(_ string) cache.CounterMetric {
 	return p.watchesMetric
 }
 
-func (p prometheusReflectorMetrics) NewShortWatchesMetric(name string) cache.CounterMetric {
+func (p prometheusReflectorMetrics) NewShortWatchesMetric(_ string) cache.CounterMetric {
 	return p.shortWatchesMetric
 }
 
-func (p prometheusReflectorMetrics) NewWatchDurationMetric(name string) cache.SummaryMetric {
+func (p prometheusReflectorMetrics) NewWatchDurationMetric(_ string) cache.SummaryMetric {
 	return p.watchDurationMetric
 }
 
-func (p prometheusReflectorMetrics) NewItemsInWatchMetric(name string) cache.SummaryMetric {
+func (p prometheusReflectorMetrics) NewItemsInWatchMetric(_ string) cache.SummaryMetric {
 	return p.itemsInWatchMetric
 }
 
-func (p prometheusReflectorMetrics) NewLastResourceVersionMetric(name string) cache.GaugeMetric {
+func (p prometheusReflectorMetrics) NewLastResourceVersionMetric(_ string) cache.GaugeMetric {
 	return p.lastResourceVersionMetric
 }
 
@@ -587,6 +587,7 @@ func (c *controller) sync(ctx context.Context) {
 		}
 
 		c.replicas[hashring] = *sts.Spec.Replicas
+
 		if _, ok := statefulsets[hashring]; !ok {
 			statefulsets[hashring] = []*appsv1.StatefulSet{}
 		}
@@ -615,6 +616,7 @@ func (c *controller) sync(ctx context.Context) {
 }
 
 func (c controller) waitForPod(ctx context.Context, name string) error {
+	//nolint:staticcheck
 	return wait.PollImmediate(time.Second, time.Minute, func() (bool, error) {
 		pod, err := c.klient.CoreV1().Pods(c.options.namespace).Get(ctx, name, metav1.GetOptions{})
 		if kerrors.IsNotFound(err) {
@@ -653,6 +655,7 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 			for i := 0; i < int(*sts.Spec.Replicas); i++ {
 				podName := fmt.Sprintf("%s-%d", sts.Name, i)
 				pod, err := c.klient.CoreV1().Pods(c.options.namespace).Get(ctx, podName, metav1.GetOptions{})
+
 				if c.options.allowDynamicScaling {
 					if kerrors.IsNotFound(err) {
 						continue
@@ -669,34 +672,10 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 					}
 				}
 				// If cluster domain is empty string we don't want dot after svc.
-				clusterDomain := ""
-				if c.options.clusterDomain != "" {
-					clusterDomain = fmt.Sprintf(".%s", c.options.clusterDomain)
-				}
-				endpoint := receive.Endpoint{
-					Address: fmt.Sprintf("%s-%d.%s.%s.svc%s:%d",
-						sts.Name,
-						i,
-						sts.Spec.ServiceName,
-						c.options.namespace,
-						clusterDomain,
-						c.options.port,
-					),
-				}
 
-				if c.options.useAzAwareHashRing {
-					//If pod annotation value is not found or key not specified,
-					//endpoint will the Statefulset name as AZ name
-					endpoint.AZ = sts.Name
-					if c.options.podAzAnnotationKey != "" && err == nil {
-						annotationValue, ok := pod.Annotations[c.options.podAzAnnotationKey]
-						if ok {
-							endpoint.AZ = annotationValue
-						}
-					}
-				}
-
+				endpoint := *c.populateEndpoint(sts, i, err, pod)
 				endpoints = append(endpoints, endpoint)
+
 				level.Info(c.logger).Log("Hashring ", h.Hashring, " got an endpoint: ", endpoint.Address, "with AZ", endpoint.AZ)
 			}
 		}
@@ -705,6 +684,40 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 		c.hashringNodes.WithLabelValues(h.Hashring).Set(float64(len(endpoints)))
 		c.hashringTenants.WithLabelValues(h.Hashring).Set(float64(len(h.Tenants)))
 	}
+}
+
+func (c *controller) populateEndpoint(sts *appsv1.StatefulSet, podIndex int, err error, pod *corev1.Pod) *receive.Endpoint {
+	// If cluster domain is empty string we don't want dot after svc.
+	clusterDomain := ""
+	if c.options.clusterDomain != "" {
+		clusterDomain = fmt.Sprintf(".%s", c.options.clusterDomain)
+	}
+
+	endpoint := receive.Endpoint{
+		Address: fmt.Sprintf("%s-%d.%s.%s.svc%s:%d",
+			sts.Name,
+			podIndex,
+			sts.Spec.ServiceName,
+			c.options.namespace,
+			clusterDomain,
+			c.options.port,
+		),
+	}
+
+	if c.options.useAzAwareHashRing {
+		// If pod annotation value is not found or key not specified,
+		// endpoint will use the Statefulset name as AZ name
+		endpoint.AZ = sts.Name
+
+		if c.options.podAzAnnotationKey != "" && err == nil {
+			annotationValue, ok := pod.Annotations[c.options.podAzAnnotationKey]
+			if ok {
+				endpoint.AZ = annotationValue
+			}
+		}
+	}
+
+	return &endpoint
 }
 
 func (c *controller) saveHashring(ctx context.Context, hashring []receive.HashringConfig, orgCM *corev1.ConfigMap) error {
