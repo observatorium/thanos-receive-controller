@@ -88,3 +88,6 @@ When a Pod is marked for termination, the controller will remove it from the has
 When a Pod is deleted, the controller will remove it from the hashring.
 When a Pod becomes unready, the controller will remove it from the hashring.
 This behaviour can be considered for use alongside the [Ketama hashing algorithm](https://thanos.io/tip/components/receive.md/#ketama-recommended).
+
+## About the `--use-az-aware-hashring` flag
+By default, the controller does not support
