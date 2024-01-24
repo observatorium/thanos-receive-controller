@@ -90,4 +90,8 @@ When a Pod becomes unready, the controller will remove it from the hashring.
 This behaviour can be considered for use alongside the [Ketama hashing algorithm](https://thanos.io/tip/components/receive.md/#ketama-recommended).
 
 ## About the `--use-az-aware-hashring` flag
-By default, the controller does not support
+By default, the controller does not support az aware hashring introduced in Thanos v0.32+ (https://thanos.io/tip/components/receive.md/#az-aware-ketama-hashring-experimental),
+This flag allows the user to enable this behaviour.
+When enabled, the controller will generate az aware hashring configuration based on the `--pod-az-annotation-key` flag, namely the value of the annotation key will be used as the az name for each pod.
+If not specified, the statefulset name will be used as AZ field.
+Note that Thanos has be upgraded to v0.32+ to work with new hashring endpoint struct.

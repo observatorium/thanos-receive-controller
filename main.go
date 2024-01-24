@@ -593,6 +593,7 @@ func (c *controller) sync(ctx context.Context) {
 		}
 		// Append the new value to the slice associated with the key
 		statefulsets[hashring] = append(statefulsets[hashring], sts.DeepCopy())
+		level.Info(c.logger).Log("Hashring ", hashring, " got a statefulset: ", sts.Name)
 
 		time.Sleep(c.options.scaleTimeout) // Give some time for all replicas before they receive hundreds req/s
 	}
@@ -697,7 +698,7 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 				}
 
 				endpoints = append(endpoints, endpoint)
-
+				level.Info(c.logger).Log("Hashring ", h.Hashring, " got an endpoint: ", endpoint.Address, "with AZ", endpoint.AZ)
 			}
 		}
 
@@ -825,8 +826,8 @@ func newQueue() *queue {
 }
 
 func (q *queue) add() {
-	q.Lock()
-	defer q.Unlock()
+	q.Mutex.Lock()
+	defer q.Mutex.Unlock()
 
 	if !q.ok {
 		return
@@ -838,8 +839,8 @@ func (q *queue) add() {
 }
 
 func (q *queue) stop() {
-	q.Lock()
-	defer q.Unlock()
+	q.Mutex.Lock()
+	defer q.Mutex.Unlock()
 
 	if !q.ok {
 		return
@@ -851,8 +852,8 @@ func (q *queue) stop() {
 
 func (q *queue) get() bool {
 	<-q.ch
-	q.Lock()
-	defer q.Unlock()
+	q.Mutex.Lock()
+	defer q.Mutex.Unlock()
 
 	return q.ok
 }
