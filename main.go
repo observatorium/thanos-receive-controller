@@ -557,7 +557,7 @@ func (c *controller) sync(ctx context.Context) {
 		return
 	}
 
-	statefulsets := make(map[string]*appsv1.StatefulSet)
+	statefulsets := make(map[string][]*appsv1.StatefulSet)
 
 	for _, obj := range c.ssetInf.GetStore().List() {
 		sts, ok := obj.(*appsv1.StatefulSet)
@@ -587,7 +587,12 @@ func (c *controller) sync(ctx context.Context) {
 		}
 
 		c.replicas[hashring] = *sts.Spec.Replicas
-		statefulsets[hashring] = sts.DeepCopy()
+		if _, ok := statefulsets[hashring]; !ok {
+			// If not, initialize a new slice
+			statefulsets[hashring] = []*appsv1.StatefulSet{}
+		}
+		// Append the new value to the slice associated with the key
+		statefulsets[hashring] = append(statefulsets[hashring], sts.DeepCopy())
 
 		time.Sleep(c.options.scaleTimeout) // Give some time for all replicas before they receive hundreds req/s
 	}
@@ -635,63 +640,65 @@ func (c controller) waitForPod(ctx context.Context, name string) error {
 	})
 }
 
-func (c *controller) populate(ctx context.Context, hashrings []receive.HashringConfig, statefulsets map[string]*appsv1.StatefulSet) {
+func (c *controller) populate(ctx context.Context, hashrings []receive.HashringConfig, statefulsets map[string][]*appsv1.StatefulSet) {
 	for i, h := range hashrings {
-		sts, exists := statefulsets[h.Hashring]
+		stsList, exists := statefulsets[h.Hashring]
 		if !exists {
 			continue
 		}
 
 		var endpoints []receive.Endpoint
 
-		for i := 0; i < int(*sts.Spec.Replicas); i++ {
-			podName := fmt.Sprintf("%s-%d", sts.Name, i)
-			pod, err := c.klient.CoreV1().Pods(c.options.namespace).Get(ctx, podName, metav1.GetOptions{})
-			if c.options.allowDynamicScaling {
-				if kerrors.IsNotFound(err) {
-					continue
-				}
-				// Do not add a replica to the hashring if pod is not Ready.
-				if !podutils.IsPodReady(pod) {
-					level.Warn(c.logger).Log("msg", "failed adding pod to hashring, pod not ready", "pod", podName, "err", err)
-					continue
-				}
+		for _, sts := range stsList {
+			for i := 0; i < int(*sts.Spec.Replicas); i++ {
+				podName := fmt.Sprintf("%s-%d", sts.Name, i)
+				pod, err := c.klient.CoreV1().Pods(c.options.namespace).Get(ctx, podName, metav1.GetOptions{})
+				if c.options.allowDynamicScaling {
+					if kerrors.IsNotFound(err) {
+						continue
+					}
+					// Do not add a replica to the hashring if pod is not Ready.
+					if !podutils.IsPodReady(pod) {
+						level.Warn(c.logger).Log("msg", "failed adding pod to hashring, pod not ready", "pod", podName, "err", err)
+						continue
+					}
 
-				if pod.ObjectMeta.DeletionTimestamp != nil && (pod.Status.Phase == corev1.PodRunning || pod.Status.Phase == corev1.PodPending) {
-					// Pod is terminating, do not add it to the hashring.
-					continue
-				}
-			}
-			// If cluster domain is empty string we don't want dot after svc.
-			clusterDomain := ""
-			if c.options.clusterDomain != "" {
-				clusterDomain = fmt.Sprintf(".%s", c.options.clusterDomain)
-			}
-			endpoint := receive.Endpoint{
-				Address: fmt.Sprintf("%s-%d.%s.%s.svc%s:%d",
-					sts.Name,
-					i,
-					sts.Spec.ServiceName,
-					c.options.namespace,
-					clusterDomain,
-					c.options.port,
-				),
-			}
-
-			if c.options.useAzAwareHashRing {
-				//If pod annotation value is not found or key not specified,
-				//endpoint will the Statefulset name as AZ name
-				endpoint.AZ = sts.Name
-				if c.options.podAzAnnotationKey != "" && err == nil {
-					annotationValue, ok := pod.Annotations[c.options.podAzAnnotationKey]
-					if ok {
-						endpoint.AZ = annotationValue
+					if pod.ObjectMeta.DeletionTimestamp != nil && (pod.Status.Phase == corev1.PodRunning || pod.Status.Phase == corev1.PodPending) {
+						// Pod is terminating, do not add it to the hashring.
+						continue
 					}
 				}
+				// If cluster domain is empty string we don't want dot after svc.
+				clusterDomain := ""
+				if c.options.clusterDomain != "" {
+					clusterDomain = fmt.Sprintf(".%s", c.options.clusterDomain)
+				}
+				endpoint := receive.Endpoint{
+					Address: fmt.Sprintf("%s-%d.%s.%s.svc%s:%d",
+						sts.Name,
+						i,
+						sts.Spec.ServiceName,
+						c.options.namespace,
+						clusterDomain,
+						c.options.port,
+					),
+				}
+
+				if c.options.useAzAwareHashRing {
+					//If pod annotation value is not found or key not specified,
+					//endpoint will the Statefulset name as AZ name
+					endpoint.AZ = sts.Name
+					if c.options.podAzAnnotationKey != "" && err == nil {
+						annotationValue, ok := pod.Annotations[c.options.podAzAnnotationKey]
+						if ok {
+							endpoint.AZ = annotationValue
+						}
+					}
+				}
+
+				endpoints = append(endpoints, endpoint)
+
 			}
-
-			endpoints = append(endpoints, endpoint)
-
 		}
 
 		hashrings[i].Endpoints = endpoints
