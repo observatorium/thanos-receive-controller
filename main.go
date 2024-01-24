@@ -74,6 +74,8 @@ type CmdConfig struct {
 	AllowDynamicScaling    bool
 	AnnotatePodsOnChange   bool
 	ScaleTimeout           time.Duration
+	useAzAwareHashRing     bool
+	podAzAnnotationKey     string
 }
 
 func parseFlags() CmdConfig {
@@ -94,6 +96,8 @@ func parseFlags() CmdConfig {
 	flag.BoolVar(&config.AllowDynamicScaling, "allow-dynamic-scaling", false, "Update the hashring configuration on scale down events.")
 	flag.BoolVar(&config.AnnotatePodsOnChange, "annotate-pods-on-change", false, "Annotates pods with current timestamp on a hashring change")
 	flag.DurationVar(&config.ScaleTimeout, "scale-timeout", defaultScaleTimeout, "A timeout to wait for receivers to really start after they report healthy")
+	flag.BoolVar(&config.useAzAwareHashRing, "use-az-aware-hashring", false, "A boolean to use az aware hashring to comply with Thanos v0.32+")
+	flag.StringVar(&config.podAzAnnotationKey, "pod-az-annotation-key", "", "pod annotation key for AZ Info, If not specified or key not found, will use sts name as AZ key")
 	flag.Parse()
 
 	return config
@@ -154,6 +158,8 @@ func main() {
 			annotatePodsOnChange:   config.AnnotatePodsOnChange,
 			allowDynamicScaling:    config.AllowDynamicScaling,
 			scaleTimeout:           config.ScaleTimeout,
+			useAzAwareHashRing:     config.useAzAwareHashRing,
+			podAzAnnotationKey:     config.podAzAnnotationKey,
 		}
 		c := newController(klient, logger, opt)
 		c.registerMetrics(reg)
@@ -338,6 +344,8 @@ type options struct {
 	allowDynamicScaling    bool
 	annotatePodsOnChange   bool
 	scaleTimeout           time.Duration
+	useAzAwareHashRing     bool
+	podAzAnnotationKey     string
 }
 
 type controller struct {
@@ -634,13 +642,12 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 			continue
 		}
 
-		var endpoints []string
+		var endpoints []receive.Endpoint
 
 		for i := 0; i < int(*sts.Spec.Replicas); i++ {
+			podName := fmt.Sprintf("%s-%d", sts.Name, i)
+			pod, err := c.klient.CoreV1().Pods(c.options.namespace).Get(ctx, podName, metav1.GetOptions{})
 			if c.options.allowDynamicScaling {
-				podName := fmt.Sprintf("%s-%d", sts.Name, i)
-
-				pod, err := c.klient.CoreV1().Pods(c.options.namespace).Get(ctx, podName, metav1.GetOptions{})
 				if kerrors.IsNotFound(err) {
 					continue
 				}
@@ -660,9 +667,8 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 			if c.options.clusterDomain != "" {
 				clusterDomain = fmt.Sprintf(".%s", c.options.clusterDomain)
 			}
-
-			endpoints = append(endpoints,
-				fmt.Sprintf("%s-%d.%s.%s.svc%s:%d",
+			endpoint := receive.Endpoint{
+				Address: fmt.Sprintf("%s-%d.%s.%s.svc%s:%d",
 					sts.Name,
 					i,
 					sts.Spec.ServiceName,
@@ -670,7 +676,22 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 					clusterDomain,
 					c.options.port,
 				),
-			)
+			}
+
+			if c.options.useAzAwareHashRing {
+				//If pod annotation value is not found or key not specified,
+				//endpoint will the Statefulset name as AZ name
+				endpoint.AZ = sts.Name
+				if c.options.podAzAnnotationKey != "" && err == nil {
+					annotationValue, ok := pod.Annotations[c.options.podAzAnnotationKey]
+					if ok {
+						endpoint.AZ = annotationValue
+					}
+				}
+			}
+
+			endpoints = append(endpoints, endpoint)
+
 		}
 
 		hashrings[i].Endpoints = endpoints
