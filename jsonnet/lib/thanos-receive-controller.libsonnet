@@ -77,7 +77,7 @@ function(params) {
       {
         apiGroups: [''],
         resources: ['pods'],
-        verbs: ['get', 'update'],
+        verbs: ['list', 'get', 'update'],
       },
       {
         apiGroups: ['apps'],
