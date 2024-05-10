@@ -580,7 +580,7 @@ func (c *controller) sync(ctx context.Context) {
 
 				if err := c.waitForPod(ctx, podName); err != nil {
 					level.Warn(c.logger).Log("msg", "failed polling until pod is ready", "pod", podName, "duration", time.Since(start), "err", err)
-					continue
+					return
 				}
 
 				level.Debug(c.logger).Log("msg", "waited until new pod was ready", "pod", podName, "duration", time.Since(start))
