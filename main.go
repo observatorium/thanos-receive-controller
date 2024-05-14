@@ -571,10 +571,24 @@ func (c *controller) sync(ctx context.Context) {
 			continue
 		}
 
-		// If there's an increase in replicas we poll for the new replicas to be ready
-		if _, ok := c.replicas[sts.Name]; ok && c.replicas[sts.Name] < *sts.Spec.Replicas {
+		stsReplica, exist := c.replicas[sts.Name]
+		// If hashring is not initialized, need to wait for all pods ready within statefulset before generating hashring
+		if !exist && c.options.allowOnlyReadyReplicas {
+			for i := int32(0); i < *sts.Spec.Replicas; i++ {
+				start := time.Now()
+				podName := fmt.Sprintf("%s-%d", sts.Name, i)
+
+				if err := c.waitForPod(ctx, podName); err != nil {
+					level.Warn(c.logger).Log("msg", "failed waiting for pod ready during hashring intialization", "pod", podName, "duration", time.Since(start), "err", err)
+					return
+				}
+
+				level.Debug(c.logger).Log("msg", "waited until new pod was ready during hashring intialization", "pod", podName, "duration", time.Since(start))
+			}
+		} else if exist && stsReplica < *sts.Spec.Replicas {
+			// If there's an increase in replicas we poll for the new replicas to be ready
 			// Iterate over new replicas to wait until they are running
-			for i := c.replicas[sts.Name]; i < *sts.Spec.Replicas; i++ {
+			for i := stsReplica; i < *sts.Spec.Replicas; i++ {
 				start := time.Now()
 				podName := fmt.Sprintf("%s-%d", sts.Name, i)
 
