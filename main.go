@@ -74,6 +74,8 @@ type CmdConfig struct {
 	AllowDynamicScaling    bool
 	AnnotatePodsOnChange   bool
 	ScaleTimeout           time.Duration
+	useAzAwareHashRing     bool
+	podAzAnnotationKey     string
 }
 
 func parseFlags() CmdConfig {
@@ -94,6 +96,8 @@ func parseFlags() CmdConfig {
 	flag.BoolVar(&config.AllowDynamicScaling, "allow-dynamic-scaling", false, "Update the hashring configuration on scale down events.")
 	flag.BoolVar(&config.AnnotatePodsOnChange, "annotate-pods-on-change", false, "Annotates pods with current timestamp on a hashring change")
 	flag.DurationVar(&config.ScaleTimeout, "scale-timeout", defaultScaleTimeout, "A timeout to wait for receivers to really start after they report healthy")
+	flag.BoolVar(&config.useAzAwareHashRing, "use-az-aware-hashring", false, "A boolean to use az aware hashring to comply with Thanos v0.32+")
+	flag.StringVar(&config.podAzAnnotationKey, "pod-az-annotation-key", "", "pod annotation key for AZ Info, If not specified or key not found, will use sts name as AZ key")
 	flag.Parse()
 
 	return config
@@ -154,6 +158,8 @@ func main() {
 			annotatePodsOnChange:   config.AnnotatePodsOnChange,
 			allowDynamicScaling:    config.AllowDynamicScaling,
 			scaleTimeout:           config.ScaleTimeout,
+			useAzAwareHashRing:     config.useAzAwareHashRing,
+			podAzAnnotationKey:     config.podAzAnnotationKey,
 		}
 		c := newController(klient, logger, opt)
 		c.registerMetrics(reg)
@@ -283,7 +289,7 @@ func newReflectorMetrics(reg *prometheus.Registry) prometheusReflectorMetrics {
 
 const labelParts = 2
 
-func splitLabel(in string) (key, value string) {
+func splitLabel(in string) (string, string) {
 	parts := strings.Split(in, "=")
 	if len(parts) != labelParts {
 		stdlog.Fatal("Labels consist of a key-value pair f.ex: 'key=value'")
@@ -292,35 +298,35 @@ func splitLabel(in string) (key, value string) {
 	return parts[0], parts[1]
 }
 
-func (p prometheusReflectorMetrics) NewListsMetric(name string) cache.CounterMetric {
+func (p prometheusReflectorMetrics) NewListsMetric(_ string) cache.CounterMetric {
 	return p.listsMetric
 }
 
-func (p prometheusReflectorMetrics) NewListDurationMetric(name string) cache.SummaryMetric {
+func (p prometheusReflectorMetrics) NewListDurationMetric(_ string) cache.SummaryMetric {
 	return p.listDurationMetric
 }
 
-func (p prometheusReflectorMetrics) NewItemsInListMetric(name string) cache.SummaryMetric {
+func (p prometheusReflectorMetrics) NewItemsInListMetric(_ string) cache.SummaryMetric {
 	return p.itemsInListMetric
 }
 
-func (p prometheusReflectorMetrics) NewWatchesMetric(name string) cache.CounterMetric {
+func (p prometheusReflectorMetrics) NewWatchesMetric(_ string) cache.CounterMetric {
 	return p.watchesMetric
 }
 
-func (p prometheusReflectorMetrics) NewShortWatchesMetric(name string) cache.CounterMetric {
+func (p prometheusReflectorMetrics) NewShortWatchesMetric(_ string) cache.CounterMetric {
 	return p.shortWatchesMetric
 }
 
-func (p prometheusReflectorMetrics) NewWatchDurationMetric(name string) cache.SummaryMetric {
+func (p prometheusReflectorMetrics) NewWatchDurationMetric(_ string) cache.SummaryMetric {
 	return p.watchDurationMetric
 }
 
-func (p prometheusReflectorMetrics) NewItemsInWatchMetric(name string) cache.SummaryMetric {
+func (p prometheusReflectorMetrics) NewItemsInWatchMetric(_ string) cache.SummaryMetric {
 	return p.itemsInWatchMetric
 }
 
-func (p prometheusReflectorMetrics) NewLastResourceVersionMetric(name string) cache.GaugeMetric {
+func (p prometheusReflectorMetrics) NewLastResourceVersionMetric(_ string) cache.GaugeMetric {
 	return p.lastResourceVersionMetric
 }
 
@@ -338,6 +344,8 @@ type options struct {
 	allowDynamicScaling    bool
 	annotatePodsOnChange   bool
 	scaleTimeout           time.Duration
+	useAzAwareHashRing     bool
+	podAzAnnotationKey     string
 }
 
 type controller struct {
@@ -549,10 +557,11 @@ func (c *controller) sync(ctx context.Context) {
 		return
 	}
 
-	statefulsets := make(map[string]*appsv1.StatefulSet)
+	statefulsets := make(map[string][]*appsv1.StatefulSet)
 
 	for _, obj := range c.ssetInf.GetStore().List() {
 		sts, ok := obj.(*appsv1.StatefulSet)
+
 		if !ok {
 			level.Error(c.logger).Log("msg", "failed type assertion from expected StatefulSet")
 		}
@@ -563,30 +572,38 @@ func (c *controller) sync(ctx context.Context) {
 		}
 
 		// If there's an increase in replicas we poll for the new replicas to be ready
-		if _, ok := c.replicas[hashring]; ok && c.replicas[hashring] < *sts.Spec.Replicas {
+		if _, ok := c.replicas[sts.Name]; ok && c.replicas[sts.Name] < *sts.Spec.Replicas {
 			// Iterate over new replicas to wait until they are running
-			for i := c.replicas[hashring]; i < *sts.Spec.Replicas; i++ {
+			for i := c.replicas[sts.Name]; i < *sts.Spec.Replicas; i++ {
 				start := time.Now()
 				podName := fmt.Sprintf("%s-%d", sts.Name, i)
 
 				if err := c.waitForPod(ctx, podName); err != nil {
 					level.Warn(c.logger).Log("msg", "failed polling until pod is ready", "pod", podName, "duration", time.Since(start), "err", err)
-					continue
+					return
 				}
 
 				level.Debug(c.logger).Log("msg", "waited until new pod was ready", "pod", podName, "duration", time.Since(start))
 			}
 		}
 
-		c.replicas[hashring] = *sts.Spec.Replicas
-		statefulsets[hashring] = sts.DeepCopy()
+		c.replicas[sts.Name] = *sts.Spec.Replicas
+
+		if _, ok := statefulsets[hashring]; !ok {
+			statefulsets[hashring] = []*appsv1.StatefulSet{}
+		}
+		// Append the new value to the slice associated with the hashring key
+		statefulsets[hashring] = append(statefulsets[hashring], sts.DeepCopy())
+		level.Info(c.logger).Log("msg ", "hashring got a new statefulset", "hashring", hashring, "statefulset", sts.Name)
 
 		time.Sleep(c.options.scaleTimeout) // Give some time for all replicas before they receive hundreds req/s
 	}
 
 	c.populate(ctx, hashrings, statefulsets)
+	level.Info(c.logger).Log("msg", "hashring populated", "hashring", fmt.Sprintf("%+v", hashrings))
 
 	err = c.saveHashring(ctx, hashrings, cm)
+
 	if err != nil {
 		c.reconcileErrors.WithLabelValues(save).Inc()
 		level.Error(c.logger).Log("msg", "failed to save hashrings", "err", err)
@@ -602,6 +619,7 @@ func (c *controller) sync(ctx context.Context) {
 }
 
 func (c controller) waitForPod(ctx context.Context, name string) error {
+	//nolint:staticcheck
 	return wait.PollImmediate(time.Second, time.Minute, func() (bool, error) {
 		pod, err := c.klient.CoreV1().Pods(c.options.namespace).Get(ctx, name, metav1.GetOptions{})
 		if kerrors.IsNotFound(err) {
@@ -627,56 +645,83 @@ func (c controller) waitForPod(ctx context.Context, name string) error {
 	})
 }
 
-func (c *controller) populate(ctx context.Context, hashrings []receive.HashringConfig, statefulsets map[string]*appsv1.StatefulSet) {
+func (c *controller) populate(ctx context.Context, hashrings []receive.HashringConfig, statefulsets map[string][]*appsv1.StatefulSet) {
 	for i, h := range hashrings {
-		sts, exists := statefulsets[h.Hashring]
+		stsList, exists := statefulsets[h.Hashring]
+
 		if !exists {
 			continue
 		}
 
-		var endpoints []string
+		var endpoints []receive.Endpoint
 
-		for i := 0; i < int(*sts.Spec.Replicas); i++ {
-			if c.options.allowDynamicScaling {
+		for _, sts := range stsList {
+			for i := 0; i < int(*sts.Spec.Replicas); i++ {
 				podName := fmt.Sprintf("%s-%d", sts.Name, i)
-
 				pod, err := c.klient.CoreV1().Pods(c.options.namespace).Get(ctx, podName, metav1.GetOptions{})
-				if kerrors.IsNotFound(err) {
-					continue
-				}
-				// Do not add a replica to the hashring if pod is not Ready.
-				if !podutils.IsPodReady(pod) {
-					level.Warn(c.logger).Log("msg", "failed adding pod to hashring, pod not ready", "pod", podName, "err", err)
-					continue
-				}
 
-				if pod.ObjectMeta.DeletionTimestamp != nil && (pod.Status.Phase == corev1.PodRunning || pod.Status.Phase == corev1.PodPending) {
-					// Pod is terminating, do not add it to the hashring.
-					continue
-				}
-			}
-			// If cluster domain is empty string we don't want dot after svc.
-			clusterDomain := ""
-			if c.options.clusterDomain != "" {
-				clusterDomain = fmt.Sprintf(".%s", c.options.clusterDomain)
-			}
+				if c.options.allowDynamicScaling {
+					if kerrors.IsNotFound(err) {
+						continue
+					}
+					// Do not add a replica to the hashring if pod is not Ready.
+					if !podutils.IsPodReady(pod) {
+						level.Warn(c.logger).Log("msg", "failed adding pod to hashring, pod not ready", "pod", podName, "err", err)
+						continue
+					}
 
-			endpoints = append(endpoints,
-				fmt.Sprintf("%s-%d.%s.%s.svc%s:%d",
-					sts.Name,
-					i,
-					sts.Spec.ServiceName,
-					c.options.namespace,
-					clusterDomain,
-					c.options.port,
-				),
-			)
+					if pod.ObjectMeta.DeletionTimestamp != nil && (pod.Status.Phase == corev1.PodRunning || pod.Status.Phase == corev1.PodPending) {
+						// Pod is terminating, do not add it to the hashring.
+						continue
+					}
+				}
+				// If cluster domain is empty string we don't want dot after svc.
+
+				endpoint := *c.populateEndpoint(sts, i, err, pod)
+				endpoints = append(endpoints, endpoint)
+
+				level.Info(c.logger).Log("msg", "Hashring got an endpoint", "hashring", h.Hashring, "endpoint:", endpoint.Address, "AZ", endpoint.AZ)
+			}
 		}
 
 		hashrings[i].Endpoints = endpoints
 		c.hashringNodes.WithLabelValues(h.Hashring).Set(float64(len(endpoints)))
 		c.hashringTenants.WithLabelValues(h.Hashring).Set(float64(len(h.Tenants)))
 	}
+}
+
+func (c *controller) populateEndpoint(sts *appsv1.StatefulSet, podIndex int, err error, pod *corev1.Pod) *receive.Endpoint {
+	// If cluster domain is empty string we don't want dot after svc.
+	clusterDomain := ""
+	if c.options.clusterDomain != "" {
+		clusterDomain = fmt.Sprintf(".%s", c.options.clusterDomain)
+	}
+
+	endpoint := receive.Endpoint{
+		Address: fmt.Sprintf("%s-%d.%s.%s.svc%s:%d",
+			sts.Name,
+			podIndex,
+			sts.Spec.ServiceName,
+			c.options.namespace,
+			clusterDomain,
+			c.options.port,
+		),
+	}
+
+	if c.options.useAzAwareHashRing {
+		// If pod annotation value is not found or key not specified,
+		// endpoint will use the Statefulset name as AZ name
+		endpoint.AZ = sts.Name
+
+		if c.options.podAzAnnotationKey != "" && err == nil {
+			annotationValue, ok := pod.Annotations[c.options.podAzAnnotationKey]
+			if ok {
+				endpoint.AZ = annotationValue
+			}
+		}
+	}
+
+	return &endpoint
 }
 
 func (c *controller) saveHashring(ctx context.Context, hashring []receive.HashringConfig, orgCM *corev1.ConfigMap) error {

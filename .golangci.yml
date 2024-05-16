@@ -19,6 +19,11 @@ linters:
   - varnamelen
   - paralleltest
   - cyclop
+  - exhaustruct
+  - depguard
+  - perfsprint
+  - maligned
+  - gosec
 
 linters-settings:
   errcheck:
