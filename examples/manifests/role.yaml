@@ -25,6 +25,7 @@ rules:
   resources:
   - pods
   verbs:
+  - list
   - get
   - update
 - apiGroups:
