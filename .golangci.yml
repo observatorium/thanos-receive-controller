@@ -24,6 +24,7 @@ linters:
   - perfsprint
   - maligned
   - gosec
+  - gocognit
 
 linters-settings:
   errcheck:
