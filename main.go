@@ -559,6 +559,8 @@ func (c *controller) sync(ctx context.Context) {
 
 	statefulsets := make(map[string][]*appsv1.StatefulSet)
 
+	var matchingStatefulSet bool
+
 	for _, obj := range c.ssetInf.GetStore().List() {
 		sts, ok := obj.(*appsv1.StatefulSet)
 
@@ -569,6 +571,8 @@ func (c *controller) sync(ctx context.Context) {
 		hashring, ok := sts.Labels[hashringLabelKey]
 		if !ok {
 			continue
+		} else {
+			matchingStatefulSet = true
 		}
 
 		// If there's an increase in replicas we poll for the new replicas to be ready
@@ -597,6 +601,10 @@ func (c *controller) sync(ctx context.Context) {
 		level.Info(c.logger).Log("msg ", "hashring got a new statefulset", "hashring", hashring, "statefulset", sts.Name)
 
 		time.Sleep(c.options.scaleTimeout) // Give some time for all replicas before they receive hundreds req/s
+	}
+
+	if !matchingStatefulSet {
+		level.Warn(c.logger).Log("msg", "could not find a statefulset with the label key "+hashringLabelKey)
 	}
 
 	c.populate(ctx, hashrings, statefulsets)
