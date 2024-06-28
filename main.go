@@ -73,6 +73,7 @@ type CmdConfig struct {
 	AllowOnlyReadyReplicas bool
 	AllowDynamicScaling    bool
 	AnnotatePodsOnChange   bool
+	AnnotatePodsLabel      string
 	ScaleTimeout           time.Duration
 	useAzAwareHashRing     bool
 	podAzAnnotationKey     string
@@ -95,6 +96,7 @@ func parseFlags() CmdConfig {
 	flag.BoolVar(&config.AllowOnlyReadyReplicas, "allow-only-ready-replicas", false, "Populate only Ready receiver replicas in the hashring configuration")
 	flag.BoolVar(&config.AllowDynamicScaling, "allow-dynamic-scaling", false, "Update the hashring configuration on scale down events.")
 	flag.BoolVar(&config.AnnotatePodsOnChange, "annotate-pods-on-change", false, "Annotates pods with current timestamp on a hashring change")
+	flag.StringVar(&config.AnnotatePodsLabel, "annotate-pods-label", "", "The label pods must have to be annotated with current timestamp by the controller on a hashring change.")
 	flag.DurationVar(&config.ScaleTimeout, "scale-timeout", defaultScaleTimeout, "A timeout to wait for receivers to really start after they report healthy")
 	flag.BoolVar(&config.useAzAwareHashRing, "use-az-aware-hashring", false, "A boolean to use az aware hashring to comply with Thanos v0.32+")
 	flag.StringVar(&config.podAzAnnotationKey, "pod-az-annotation-key", "", "pod annotation key for AZ Info, If not specified or key not found, will use sts name as AZ key")
@@ -156,6 +158,7 @@ func main() {
 			labelValue:             labelValue,
 			allowOnlyReadyReplicas: config.AllowOnlyReadyReplicas,
 			annotatePodsOnChange:   config.AnnotatePodsOnChange,
+			annotatePodsLabel:      config.AnnotatePodsLabel,
 			allowDynamicScaling:    config.AllowDynamicScaling,
 			scaleTimeout:           config.ScaleTimeout,
 			useAzAwareHashRing:     config.useAzAwareHashRing,
@@ -343,6 +346,7 @@ type options struct {
 	allowOnlyReadyReplicas bool
 	allowDynamicScaling    bool
 	annotatePodsOnChange   bool
+	annotatePodsLabel      string
 	scaleTimeout           time.Duration
 	useAzAwareHashRing     bool
 	podAzAnnotationKey     string
@@ -788,11 +792,16 @@ func (c *controller) saveHashring(ctx context.Context, hashring []receive.Hashri
 func (c *controller) annotatePods(ctx context.Context) {
 	annotationKey := fmt.Sprintf("%s/%s", c.options.labelKey, "lastControllerUpdate")
 	updateTime := fmt.Sprintf("%d", time.Now().Unix())
+	annotatePodsLabel := fmt.Sprintf("%s=%s", c.options.labelKey, c.options.labelValue)
+
+	if c.options.annotatePodsLabel != "" {
+		annotatePodsLabel = c.options.annotatePodsLabel
+	}
 
 	// Select pods that have a controllerLabel matching ours.
 	podList, err := c.klient.CoreV1().Pods(c.options.namespace).List(ctx,
 		metav1.ListOptions{
-			LabelSelector: fmt.Sprintf("%s=%s", c.options.labelKey, c.options.labelValue),
+			LabelSelector: annotatePodsLabel,
 		})
 	if err != nil {
 		level.Error(c.logger).Log("msg", "failed to list pods belonging to controller", "err", err)
