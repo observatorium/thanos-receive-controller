@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/stretchr/testify/require"
 	"github.com/thanos-io/thanos/pkg/receive"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -32,6 +33,7 @@ func TestController(t *testing.T) {
 		statefulsets  []*appsv1.StatefulSet
 		clusterDomain string
 		expected      []receive.HashringConfig
+		notProvision  bool
 	}{
 		{
 			name:     "Empty",
@@ -286,6 +288,7 @@ func TestController(t *testing.T) {
 		statefulsets := tt.statefulsets
 		expected := tt.expected
 		clusterDomain := tt.clusterDomain
+		provisioned := !tt.notProvision
 
 		t.Run(name, func(t *testing.T) {
 			opts := &options{
@@ -303,7 +306,7 @@ func TestController(t *testing.T) {
 			cleanUp := setupController(ctx, t, klient, opts)
 			defer cleanUp()
 
-			_ = createInitialResources(ctx, t, klient, opts, hashrings, statefulsets)
+			_ = createInitialResources(ctx, t, klient, opts, hashrings, statefulsets, provisioned)
 
 			// Reconciliation is async, so we need to wait a bit.
 			<-time.After(reconciliationDelay)
@@ -345,6 +348,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 		hashrings       []receive.HashringConfig
 		labels          map[string]string
 		shouldBeUpdated bool
+		provisioned     bool
 	}{
 		{
 			name: "DifferentHashring",
@@ -366,6 +370,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 		hashrings := tt.hashrings
 		labels := tt.labels
 		shouldBeUpdated := tt.shouldBeUpdated
+		provisioned := tt.provisioned
 
 		t.Run(name, func(t *testing.T) {
 			opts := &options{
@@ -397,7 +402,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 							ServiceName: "h0",
 						},
 					},
-				})
+				}, provisioned)
 
 			buf, err := json.Marshal(hashrings)
 			if err != nil {
@@ -452,7 +457,9 @@ func TestControllerWithAzAware(t *testing.T) {
 		hashrings     []receive.HashringConfig
 		statefulsets  []*appsv1.StatefulSet
 		clusterDomain string
+		notProvision  bool
 		expected      []receive.HashringConfig
+		expectErr     bool
 	}{
 		{
 			name:     "Empty",
@@ -758,12 +765,118 @@ func TestControllerWithAzAware(t *testing.T) {
 				},
 			}},
 		},
+		{
+			name: "OneHashringManyStatefulSetsNotProvisionedError",
+			hashrings: []receive.HashringConfig{{
+				Hashring: "hashring0",
+				Tenants:  []string{"foo", "bar"},
+			}},
+			statefulsets: []*appsv1.StatefulSet{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "hashring0",
+						Labels: map[string]string{
+							"a":              "b",
+							hashringLabelKey: "hashring0",
+						},
+					},
+					Spec: appsv1.StatefulSetSpec{
+						Replicas:    intPointer(3),
+						ServiceName: "h0",
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "hashring1",
+						Labels: map[string]string{
+							"a":              "b",
+							hashringLabelKey: "hashring0",
+						},
+					},
+					Spec: appsv1.StatefulSetSpec{
+						Replicas:    intPointer(2),
+						ServiceName: "h0",
+					},
+				},
+			},
+			clusterDomain: "cluster.local",
+			notProvision:  true,
+			expectErr:     true,
+		},
+		{
+			name:         "OneHashringManyStatefulSetsNotProvisioned",
+			notProvision: true,
+			hashrings: []receive.HashringConfig{{
+				Hashring: "group",
+			}},
+			statefulsets: []*appsv1.StatefulSet{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "rep0",
+						Labels: map[string]string{
+							"a":              "b",
+							hashringLabelKey: "group",
+						},
+					},
+					Spec: appsv1.StatefulSetSpec{
+						Replicas:    intPointer(1),
+						ServiceName: "h0",
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "rep1",
+						Labels: map[string]string{
+							"a":              "b",
+							hashringLabelKey: "group",
+						},
+					},
+					Spec: appsv1.StatefulSetSpec{
+						Replicas:    intPointer(1),
+						ServiceName: "h1",
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "rep2",
+						Labels: map[string]string{
+							"a":              "b",
+							hashringLabelKey: "group",
+						},
+					},
+					Spec: appsv1.StatefulSetSpec{
+						Replicas:    intPointer(1),
+						ServiceName: "h2",
+					},
+				},
+			},
+			clusterDomain: "cluster.local",
+			expected: []receive.HashringConfig{{
+				Hashring: "group",
+				Endpoints: []receive.Endpoint{
+					{
+						Address: "rep0-0.h0.namespace.svc.cluster.local:10901",
+						AZ:      "rep0",
+					},
+					{
+						Address: "rep1-0.h1.namespace.svc.cluster.local:10901",
+						AZ:      "rep1",
+					},
+					{
+						Address: "rep2-0.h2.namespace.svc.cluster.local:10901",
+						AZ:      "rep2",
+					},
+				},
+			}},
+		},
 	} {
 		name := tt.name
 		hashrings := tt.hashrings
 		statefulsets := tt.statefulsets
 		expected := tt.expected
+		expectErr := tt.expectErr
 		clusterDomain := tt.clusterDomain
+		provisioned := !tt.notProvision
 
 		t.Run(name, func(t *testing.T) {
 			opts := &options{
@@ -777,16 +890,21 @@ func TestControllerWithAzAware(t *testing.T) {
 				port:                   port,
 				scheme:                 "http",
 				useAzAwareHashRing:     true,
+				migrationState:         "hello",
 			}
 			klient := fake.NewSimpleClientset()
 			cleanUp := setupController(ctx, t, klient, opts)
 			defer cleanUp()
 
-			_ = createInitialResources(ctx, t, klient, opts, hashrings, statefulsets)
+			_ = createInitialResources(ctx, t, klient, opts, hashrings, statefulsets, provisioned)
 
 			// Reconciliation is async, so we need to wait a bit.
 			<-time.After(reconciliationDelay)
 			cm, err := klient.CoreV1().ConfigMaps(opts.namespace).Get(ctx, opts.configMapGeneratedName, metav1.GetOptions{})
+			if expectErr {
+				require.Error(t, err, "expected error to get generated config map")
+				return
+			}
 			if err != nil {
 				t.Fatalf("got unexpected error getting ConfigMap: %v", err)
 			}
@@ -833,6 +951,7 @@ func TestControllerConfigmapUpdateWithAzAware(t *testing.T) {
 		hashrings       []receive.HashringConfig
 		labels          map[string]string
 		shouldBeUpdated bool
+		provisioned     bool
 	}{
 		{
 			name: "DifferentHashring",
@@ -854,6 +973,7 @@ func TestControllerConfigmapUpdateWithAzAware(t *testing.T) {
 		hashrings := tt.hashrings
 		labels := tt.labels
 		shouldBeUpdated := tt.shouldBeUpdated
+		provisioned := tt.provisioned
 
 		t.Run(name, func(t *testing.T) {
 			opts := &options{
@@ -886,7 +1006,7 @@ func TestControllerConfigmapUpdateWithAzAware(t *testing.T) {
 							ServiceName: "h0",
 						},
 					},
-				})
+				}, provisioned)
 
 			buf, err := json.Marshal(hashrings)
 			if err != nil {
@@ -956,6 +1076,7 @@ func createInitialResources(
 	opts *options,
 	hashrings []receive.HashringConfig,
 	statefulsets []*appsv1.StatefulSet,
+	provisioned bool,
 ) *corev1.ConfigMap {
 	t.Helper()
 
@@ -975,6 +1096,21 @@ func createInitialResources(
 	}
 	if _, err := klient.CoreV1().ConfigMaps(opts.namespace).Create(ctx, cm, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("got unexpected error creating ConfigMap: %v", err)
+	}
+
+	if provisioned {
+		genCm := &corev1.ConfigMap{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      opts.configMapGeneratedName,
+				Namespace: opts.namespace,
+			},
+			Data: map[string]string{
+				opts.fileName: "empty",
+			},
+		}
+		if _, err := klient.CoreV1().ConfigMaps(opts.namespace).Create(ctx, genCm, metav1.CreateOptions{}); err != nil {
+			t.Fatalf("got unexpected error creating GeneratedConfigMap: %v", err)
+		}
 	}
 
 	for _, sts := range statefulsets {
