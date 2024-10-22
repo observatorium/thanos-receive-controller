@@ -76,6 +76,7 @@ type CmdConfig struct {
 	ScaleTimeout           time.Duration
 	useAzAwareHashRing     bool
 	podAzAnnotationKey     string
+	LogFormat              string
 }
 
 func parseFlags() CmdConfig {
@@ -98,17 +99,25 @@ func parseFlags() CmdConfig {
 	flag.DurationVar(&config.ScaleTimeout, "scale-timeout", defaultScaleTimeout, "A timeout to wait for receivers to really start after they report healthy")
 	flag.BoolVar(&config.useAzAwareHashRing, "use-az-aware-hashring", false, "A boolean to use az aware hashring to comply with Thanos v0.32+")
 	flag.StringVar(&config.podAzAnnotationKey, "pod-az-annotation-key", "", "pod annotation key for AZ Info, If not specified or key not found, will use sts name as AZ key")
+	flag.StringVar(&config.LogFormat, "log.format", "logfmt", "Log format to use. Possible options: logfmt or json.")
 	flag.Parse()
 
 	return config
 }
 
 func main() {
-	logger := log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
-	logger = log.WithPrefix(logger, "ts", log.DefaultTimestampUTC)
-	logger = log.WithPrefix(logger, "caller", log.DefaultCaller)
-
 	config := parseFlags()
+
+	var logger log.Logger
+	if config.LogFormat == "json" {
+		logger = log.NewJSONLogger(log.NewSyncWriter(os.Stderr))
+		logger = log.WithPrefix(logger, "ts", log.DefaultTimestampUTC)
+		logger = log.WithPrefix(logger, "caller", log.DefaultCaller)
+	} else {
+		logger = log.NewLogfmtLogger(log.NewSyncWriter(os.Stderr))
+		logger = log.WithPrefix(logger, "ts", log.DefaultTimestampUTC)
+		logger = log.WithPrefix(logger, "caller", log.DefaultCaller)
+	}
 
 	var tmpControllerLabel string
 	if len(config.StatefulSetLabel) > 0 {
