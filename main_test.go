@@ -15,7 +15,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 )
 
-const reconciliationDelay = 500 * time.Millisecond
+const reconciliationDelay = 1000 * time.Millisecond
 
 func intPointer(i int32) *int32 {
 	return &i
