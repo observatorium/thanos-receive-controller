@@ -53,9 +53,9 @@ $(KUBEVAL): $(BINGO_DIR)/kubeval.mod
 	@echo "(re)installing $(GOBIN)/kubeval-v0.0.0-20201005082916-38668c6c5b23"
 	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=kubeval.mod -o=$(GOBIN)/kubeval-v0.0.0-20201005082916-38668c6c5b23 "github.com/instrumenta/kubeval"
 
-PROMTOOL := $(GOBIN)/promtool-v1.8.2-0.20200213233353-b90be6f32a33
+PROMTOOL := $(GOBIN)/promtool-v0.303.0
 $(PROMTOOL): $(BINGO_DIR)/promtool.mod
 	@# Install binary/ries using Go 1.14+ build command. This is using bwplotka/bingo-controlled, separate go module with pinned dependencies.
-	@echo "(re)installing $(GOBIN)/promtool-v1.8.2-0.20200213233353-b90be6f32a33"
-	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=promtool.mod -o=$(GOBIN)/promtool-v1.8.2-0.20200213233353-b90be6f32a33 "github.com/prometheus/prometheus/cmd/promtool"
+	@echo "(re)installing $(GOBIN)/promtool-v0.303.0"
+	@cd $(BINGO_DIR) && GOWORK=off $(GO) build -mod=mod -modfile=promtool.mod -o=$(GOBIN)/promtool-v0.303.0 "github.com/prometheus/prometheus/cmd/promtool"
 
