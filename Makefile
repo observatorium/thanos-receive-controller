@@ -21,7 +21,7 @@ VCS_REF := $(strip $(shell [ -d .git ] && git rev-parse --short HEAD))
 all: generate validate fmt thanos-receive-controller
 
 thanos-receive-controller: go-vendor main.go
-	CGO_ENABLED=0 GO111MODULE=on GOPROXY=https://proxy.golang.org go build -mod vendor -v -checklinkname=0
+	CGO_ENABLED=0 GO111MODULE=on GOPROXY=https://proxy.golang.org go build -mod vendor -v
 
 .PHONY: generate
 generate: jsonnet-vendor ${ALERTS} ${RULES} ${DASHBOARDS} ${MANIFESTS}
