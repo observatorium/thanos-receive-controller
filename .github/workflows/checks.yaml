@@ -16,10 +16,10 @@ jobs:
           - ubuntu-latest
     name: Lint
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v6
     - name: Import environment variables from file
       run: cat ".github/env" >> $GITHUB_ENV
-    - uses: actions/setup-go@v2
+    - uses: actions/setup-go@v6
       with:
         go-version: '${{ env.golang-version }}'
     - run: make --always-make lint && git diff --exit-code
@@ -27,10 +27,10 @@ jobs:
     runs-on: ubuntu-latest
     name: Generate
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v6
     - name: Import environment variables from file
       run: cat ".github/env" >> $GITHUB_ENV
-    - uses: actions/setup-go@v2
+    - uses: actions/setup-go@v6
       with:
         go-version: '${{ env.golang-version }}'
     - run: make --always-make generate && git diff --exit-code
@@ -42,10 +42,10 @@ jobs:
           - ubuntu-latest
     name: Build the binary
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v6
     - name: Import environment variables from file
       run: cat ".github/env" >> $GITHUB_ENV
-    - uses: actions/setup-go@v2
+    - uses: actions/setup-go@v6
       with:
         go-version: '${{ env.golang-version }}'
     - run: make thanos-receive-controller
