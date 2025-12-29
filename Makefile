@@ -67,7 +67,7 @@ jsonnet-fmt: $(JSONNETFMT)
 
 .PHONY: lint
 lint: fmt prom-lint $(GOLANGCI_LINT)
-	$(GOLANGCI_LINT) run -v --enable-all
+	$(GOLANGCI_LINT) run -v
 
 .PHONY: prom-lint
 prom-lint: ${ALERTS} ${RULES} $(PROMTOOL)

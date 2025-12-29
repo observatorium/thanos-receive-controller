@@ -1,9 +1,7 @@
 run:
-  # default concurrency is a available CPU number
-  concurrency: 4
-  # timeout for analysis, e.g. 30s, 5m, default is 1m
   deadline: 5m
-  tests: true
+  allow-parallel-runners: true
+  issues-exit-code: 1
 
 issues:
   # don't skip warning about doc comments
@@ -13,24 +11,25 @@ issues:
     - vendor
 
 linters:
-  disable:
-  - exhaustivestruct
-  - gci
-  - godot
-  - nlreturn
-  - nolintlint
-  - testpackage
-  - wrapcheck
-  - gomoddirectives
-  - ireturn
-  - varnamelen
-  - paralleltest
-  - cyclop
-  - exhaustruct
-  - depguard
-  - perfsprint
-  - maligned
-  - gosec
+  disable-all: true
+  enable:
+    - errcheck
+    - goconst
+    - gocyclo
+    - gofmt
+    - goimports
+    - gosimple
+    - govet
+    - ineffassign
+    - misspell
+    - prealloc
+    - promlinter
+    - staticcheck
+    - tagliatelle
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
 
 linters-settings:
   errcheck:

@@ -299,7 +299,7 @@ func TestController(t *testing.T) {
 				port:                   port,
 				scheme:                 "http",
 			}
-			klient := fake.NewSimpleClientset()
+			klient := fake.NewClientset()
 			cleanUp := setupController(ctx, t, klient, opts)
 			defer cleanUp()
 
@@ -379,7 +379,7 @@ func TestControllerConfigmapUpdate(t *testing.T) {
 				port:                   port,
 				scheme:                 "http",
 			}
-			klient := fake.NewSimpleClientset()
+			klient := fake.NewClientset()
 
 			cm := createInitialResources(ctx, t, klient, opts,
 				originalHashrings,
@@ -778,7 +778,7 @@ func TestControllerWithAzAware(t *testing.T) {
 				scheme:                 "http",
 				useAzAwareHashRing:     true,
 			}
-			klient := fake.NewSimpleClientset()
+			klient := fake.NewClientset()
 			cleanUp := setupController(ctx, t, klient, opts)
 			defer cleanUp()
 
@@ -868,7 +868,7 @@ func TestControllerConfigmapUpdateWithAzAware(t *testing.T) {
 				scheme:                 "http",
 				useAzAwareHashRing:     true,
 			}
-			klient := fake.NewSimpleClientset()
+			klient := fake.NewClientset()
 
 			cm := createInitialResources(ctx, t, klient, opts,
 				originalHashrings,
