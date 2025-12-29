@@ -67,7 +67,7 @@ jsonnet-fmt: $(JSONNETFMT)
 
 .PHONY: lint
 lint: fmt prom-lint $(GOLANGCI_LINT)
-	$(GOLANGCI_LINT) run -v
+	$(GOLANGCI_LINT) run -v --timeout=5m
 
 .PHONY: prom-lint
 prom-lint: ${ALERTS} ${RULES} $(PROMTOOL)
