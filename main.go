@@ -648,12 +648,11 @@ func (c controller) waitForPod(ctx context.Context, name string) error {
 func (c *controller) populate(ctx context.Context, hashrings []receive.HashringConfig, statefulsets map[string][]*appsv1.StatefulSet) {
 	for i, h := range hashrings {
 		stsList, exists := statefulsets[h.Hashring]
-
 		if !exists {
 			continue
 		}
 
-		var endpoints []receive.Endpoint
+		endpoints := []receive.Endpoint{}
 
 		for _, sts := range stsList {
 			for i := 0; i < int(*sts.Spec.Replicas); i++ {

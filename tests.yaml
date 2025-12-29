@@ -44,7 +44,7 @@ tests:
         job: 'thanos-receive-controller'
         namespace: 'production'
       exp_annotations:
-        message: 'Thanos Receive Controller from production is failing to reconcile changes, 45% of attempts failed.'
+        message: 'Thanos Receive Controller from production is failing to reconcile changes, 33.33% of attempts failed.'
   - eval_time: 6m
     alertname: ThanosReceiveControllerConfigmapChangeErrorRate
     exp_alerts:

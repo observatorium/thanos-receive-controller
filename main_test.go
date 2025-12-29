@@ -300,10 +300,11 @@ func TestController(t *testing.T) {
 				scheme:                 "http",
 			}
 			klient := fake.NewClientset()
-			cleanUp := setupController(ctx, t, klient, opts)
-			defer cleanUp()
 
 			_ = createInitialResources(ctx, t, klient, opts, hashrings, statefulsets)
+
+			cleanUp := setupController(ctx, t, klient, opts)
+			defer cleanUp()
 
 			// Reconciliation is async, so we need to wait a bit.
 			<-time.After(reconciliationDelay)
@@ -779,10 +780,11 @@ func TestControllerWithAzAware(t *testing.T) {
 				useAzAwareHashRing:     true,
 			}
 			klient := fake.NewClientset()
-			cleanUp := setupController(ctx, t, klient, opts)
-			defer cleanUp()
 
 			_ = createInitialResources(ctx, t, klient, opts, hashrings, statefulsets)
+
+			cleanUp := setupController(ctx, t, klient, opts)
+			defer cleanUp()
 
 			// Reconciliation is async, so we need to wait a bit.
 			<-time.After(reconciliationDelay)
