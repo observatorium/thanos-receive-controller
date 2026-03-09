@@ -15,7 +15,7 @@ jobs:
         run: cat ".github/env" >> $GITHUB_ENV
 
       - name: Login to image registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: quay.io
           username: ${{ secrets.QUAY_USERNAME }}
