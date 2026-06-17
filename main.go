@@ -68,6 +68,7 @@ type CmdConfig struct {
 	ConfigMapGeneratedName string
 	FileName               string
 	Port                   int
+	CapNProtoPort          int
 	Scheme                 string
 	InternalAddr           string
 	AllowOnlyReadyReplicas bool
@@ -90,6 +91,7 @@ func parseFlags() CmdConfig {
 	flag.StringVar(&config.ConfigMapGeneratedName, "configmap-generated-name", "", "The name of the generated and populated ConfigMap")
 	flag.StringVar(&config.FileName, "file-name", "", "The name of the configuration file in the ConfigMap")
 	flag.IntVar(&config.Port, "port", defaultPort, "The port on which receive components are listening for write requests")
+	flag.IntVar(&config.CapNProtoPort, "capnproto-port", 0, "The port on which receive components are listening for Cap'n Proto replication. If set to 0, the Cap'n Proto address is not populated in the hashring configuration")
 	flag.StringVar(&config.Scheme, "scheme", "http", "The URL scheme on which receive components accept write requests")
 	flag.StringVar(&config.InternalAddr, "internal-addr", ":8080", "The address on which internal server runs")
 	flag.BoolVar(&config.AllowOnlyReadyReplicas, "allow-only-ready-replicas", false, "Populate only Ready receiver replicas in the hashring configuration")
@@ -151,6 +153,7 @@ func main() {
 			fileName:               config.FileName,
 			namespace:              config.Namespace,
 			port:                   config.Port,
+			capnprotoPort:          config.CapNProtoPort,
 			scheme:                 config.Scheme,
 			labelKey:               labelKey,
 			labelValue:             labelValue,
@@ -337,6 +340,7 @@ type options struct {
 	fileName               string
 	namespace              string
 	port                   int
+	capnprotoPort          int
 	scheme                 string
 	labelKey               string
 	labelValue             string
@@ -705,6 +709,17 @@ func (c *controller) populateEndpoint(sts *appsv1.StatefulSet, podIndex int, err
 			clusterDomain,
 			c.options.port,
 		),
+	}
+
+	if c.options.capnprotoPort != 0 {
+		endpoint.CapNProtoAddress = fmt.Sprintf("%s-%d.%s.%s.svc%s:%d",
+			sts.Name,
+			podIndex,
+			sts.Spec.ServiceName,
+			c.options.namespace,
+			clusterDomain,
+			c.options.capnprotoPort,
+		)
 	}
 
 	if c.options.useAzAwareHashRing {
