@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"crypto/md5" //nolint:gosec
+	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -654,6 +655,10 @@ func (c *controller) populate(ctx context.Context, hashrings []receive.HashringC
 
 		endpoints := []receive.Endpoint{}
 
+		sort.Slice(stsList, func(a, b int) bool {
+			return stsList[a].Name < stsList[b].Name
+		})
+
 		for _, sts := range stsList {
 			for i := 0; i < int(*sts.Spec.Replicas); i++ {
 				podName := fmt.Sprintf("%s-%d", sts.Name, i)
@@ -818,11 +823,14 @@ func (c *controller) annotatePods(ctx context.Context) {
 
 // hashAsMetricValue generates metric value from hash of data.
 func hashAsMetricValue(data []byte) float64 {
-	sum := md5.Sum(data) //nolint:gosec
-	// We only want 48 bits as a float64 only has a 53 bit mantissa.
-	smallSum := sum[0:6]
+	sum := sha256.Sum256(data)
 	bytes := make([]byte, 8) //nolint:gomnd
-	copy(bytes, smallSum)
+	// Keep only the first 48 bits since a float64 has a 53 bit mantissa.
+	// Little-endian representation:
+	// | mantissa| exponent| sign|
+	// +---------+---------+-----+
+	// | 53 bits | 11 bits |1 bit|
+	copy(bytes, sum[:6])
 
 	return float64(binary.LittleEndian.Uint64(bytes))
 }
