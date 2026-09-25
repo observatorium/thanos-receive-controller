@@ -95,3 +95,10 @@ This flag allows the user to enable this behaviour.
 When enabled, the controller will generate az aware hashring configuration based on the `--pod-az-annotation-key` flag, namely the value of the annotation key will be used as the az name for each pod.
 If not specified, the statefulset name will be used as AZ field.
 Note that Thanos has be upgraded to v0.32+ to work with new hashring endpoint struct.
+
+## About the `--capnproto-port` flag
+By default, the controller only populates the HTTP/gRPC `address` field of each hashring endpoint, using the `--port` flag.
+Thanos v0.37+ supports a faster Cap'n Proto based replication protocol, which listens on a separate port (`--receive.capnproto-address`, `19391` by default).
+Setting `--capnproto-port` to a non-zero value makes the controller additionally populate the `capnproto_address` field of every endpoint, using the same DNS name as `address` but with the configured Cap'n Proto port.
+When the flag is left at its default value of `0`, the `capnproto_address` field is omitted and the behaviour is unchanged.
+

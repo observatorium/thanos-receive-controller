@@ -31,6 +31,7 @@ func TestController(t *testing.T) {
 		hashrings     []receive.HashringConfig
 		statefulsets  []*appsv1.StatefulSet
 		clusterDomain string
+		capnprotoPort int
 		expected      []receive.HashringConfig
 	}{
 		{
@@ -280,6 +281,44 @@ func TestController(t *testing.T) {
 				},
 			}},
 		},
+		{
+			name:          "OneHashringOneStatefulSetWithCapNProto",
+			capnprotoPort: 19391,
+			hashrings: []receive.HashringConfig{{
+				Hashring: "hashring0",
+				Tenants:  []string{"foo", "bar"},
+			}},
+			statefulsets: []*appsv1.StatefulSet{
+				{
+					ObjectMeta: metav1.ObjectMeta{
+						Name: "hashring0",
+						Labels: map[string]string{
+							"a":              "b",
+							hashringLabelKey: "hashring0",
+						},
+					},
+					Spec: appsv1.StatefulSetSpec{
+						Replicas:    intPointer(2),
+						ServiceName: "h0",
+					},
+				},
+			},
+			clusterDomain: "cluster.local",
+			expected: []receive.HashringConfig{{
+				Hashring: "hashring0",
+				Tenants:  []string{"foo", "bar"},
+				Endpoints: []receive.Endpoint{
+					{
+						Address:          "hashring0-0.h0.namespace.svc.cluster.local:10901",
+						CapNProtoAddress: "hashring0-0.h0.namespace.svc.cluster.local:19391",
+					},
+					{
+						Address:          "hashring0-1.h0.namespace.svc.cluster.local:10901",
+						CapNProtoAddress: "hashring0-1.h0.namespace.svc.cluster.local:19391",
+					},
+				},
+			}},
+		},
 	} {
 		name := tt.name
 		hashrings := tt.hashrings
@@ -297,6 +336,7 @@ func TestController(t *testing.T) {
 				configMapGeneratedName: "generated",
 				namespace:              "namespace",
 				port:                   port,
+				capnprotoPort:          tt.capnprotoPort,
 				scheme:                 "http",
 			}
 			klient := fake.NewClientset()
