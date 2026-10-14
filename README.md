@@ -93,5 +93,7 @@ This behaviour can be considered for use alongside the [Ketama hashing algorithm
 By default, the controller does not support az aware hashring introduced in Thanos v0.32+ (https://thanos.io/tip/components/receive.md/#az-aware-ketama-hashring-experimental),
 This flag allows the user to enable this behaviour.
 When enabled, the controller will generate az aware hashring configuration based on the `--pod-az-annotation-key` flag, namely the value of the annotation key will be used as the az name for each pod.
+Alternatively, the `--pod-az-label-key` flag takes the az name from a pod label, e.g. `topology.kubernetes.io/zone` when the cluster sets the node topology labels on pods.
+If both flags are set, the annotation takes precedence, and the label is used when the annotation is not found.
 If not specified, the statefulset name will be used as AZ field.
 Note that Thanos has be upgraded to v0.32+ to work with new hashring endpoint struct.
