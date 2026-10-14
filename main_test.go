@@ -933,6 +933,81 @@ func TestControllerConfigmapUpdateWithAzAware(t *testing.T) {
 	}
 }
 
+func TestPopulateEndpointAZ(t *testing.T) {
+	sts := &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: "thanos-receive-hashring0"},
+		Spec:       appsv1.StatefulSetSpec{ServiceName: "h0"},
+	}
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:        "thanos-receive-hashring0-0",
+			Annotations: map[string]string{"az-annotation": "az-from-annotation"},
+			Labels:      map[string]string{"topology.kubernetes.io/zone": "az-from-label"},
+		},
+	}
+
+	for _, tt := range []struct {
+		name          string
+		annotationKey string
+		labelKey      string
+		err           error
+		expected      string
+	}{
+		{
+			name:     "NoKeys",
+			expected: "thanos-receive-hashring0",
+		},
+		{
+			name:          "AnnotationKey",
+			annotationKey: "az-annotation",
+			expected:      "az-from-annotation",
+		},
+		{
+			name:     "LabelKey",
+			labelKey: "topology.kubernetes.io/zone",
+			expected: "az-from-label",
+		},
+		{
+			name:          "AnnotationKeyTakesPrecedence",
+			annotationKey: "az-annotation",
+			labelKey:      "topology.kubernetes.io/zone",
+			expected:      "az-from-annotation",
+		},
+		{
+			name:          "AnnotationNotFoundFallsBackToLabel",
+			annotationKey: "missing",
+			labelKey:      "topology.kubernetes.io/zone",
+			expected:      "az-from-label",
+		},
+		{
+			name:     "LabelNotFound",
+			labelKey: "missing",
+			expected: "thanos-receive-hashring0",
+		},
+		{
+			name:     "PodGetError",
+			labelKey: "topology.kubernetes.io/zone",
+			err:      context.DeadlineExceeded,
+			expected: "thanos-receive-hashring0",
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			c := &controller{options: &options{
+				namespace:          "namespace",
+				port:               10901,
+				useAzAwareHashRing: true,
+				podAzAnnotationKey: tt.annotationKey,
+				podAzLabelKey:      tt.labelKey,
+			}}
+
+			endpoint := c.populateEndpoint(sts, 0, tt.err, pod)
+			if endpoint.AZ != tt.expected {
+				t.Errorf("unexpected AZ\ngiven:\t%q\nexpected:\t%q", endpoint.AZ, tt.expected)
+			}
+		})
+	}
+}
+
 func setupController(ctx context.Context, t *testing.T, klient kubernetes.Interface, opts *options) func() {
 	t.Helper()
 

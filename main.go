@@ -77,6 +77,7 @@ type CmdConfig struct {
 	ScaleTimeout           time.Duration
 	useAzAwareHashRing     bool
 	podAzAnnotationKey     string
+	podAzLabelKey          string
 }
 
 func parseFlags() CmdConfig {
@@ -99,6 +100,7 @@ func parseFlags() CmdConfig {
 	flag.DurationVar(&config.ScaleTimeout, "scale-timeout", defaultScaleTimeout, "A timeout to wait for receivers to really start after they report healthy")
 	flag.BoolVar(&config.useAzAwareHashRing, "use-az-aware-hashring", false, "A boolean to use az aware hashring to comply with Thanos v0.32+")
 	flag.StringVar(&config.podAzAnnotationKey, "pod-az-annotation-key", "", "pod annotation key for AZ Info, If not specified or key not found, will use sts name as AZ key")
+	flag.StringVar(&config.podAzLabelKey, "pod-az-label-key", "", "pod label key for AZ Info, e.g. topology.kubernetes.io/zone. Used when the annotation key is not specified or not found. If not specified or key not found, will use sts name as AZ key")
 	flag.Parse()
 
 	return config
@@ -161,6 +163,7 @@ func main() {
 			scaleTimeout:           config.ScaleTimeout,
 			useAzAwareHashRing:     config.useAzAwareHashRing,
 			podAzAnnotationKey:     config.podAzAnnotationKey,
+			podAzLabelKey:          config.podAzLabelKey,
 		}
 		c := newController(klient, logger, opt)
 		c.registerMetrics(reg)
@@ -347,6 +350,7 @@ type options struct {
 	scaleTimeout           time.Duration
 	useAzAwareHashRing     bool
 	podAzAnnotationKey     string
+	podAzLabelKey          string
 }
 
 type controller struct {
@@ -713,14 +717,16 @@ func (c *controller) populateEndpoint(sts *appsv1.StatefulSet, podIndex int, err
 	}
 
 	if c.options.useAzAwareHashRing {
-		// If pod annotation value is not found or key not specified,
+		// AZ is taken from the pod annotation, then from the pod label.
+		// If neither is found or keys are not specified,
 		// endpoint will use the Statefulset name as AZ name
 		endpoint.AZ = sts.Name
 
-		if c.options.podAzAnnotationKey != "" && err == nil {
-			annotationValue, ok := pod.Annotations[c.options.podAzAnnotationKey]
-			if ok {
+		if err == nil {
+			if annotationValue, ok := pod.Annotations[c.options.podAzAnnotationKey]; c.options.podAzAnnotationKey != "" && ok {
 				endpoint.AZ = annotationValue
+			} else if labelValue, ok := pod.Labels[c.options.podAzLabelKey]; c.options.podAzLabelKey != "" && ok {
+				endpoint.AZ = labelValue
 			}
 		}
 	}
